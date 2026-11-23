@@ -97,7 +97,7 @@ interface AppContextValue {
   updateNoteTitle: (id: string, title: string) => void;
   updateNoteContent: (id: string, content: string) => void;
   addNoteTag: (noteId: string, tagName: string) => Promise<void>;
-  removeNoteTag: (noteId: string, tagName: string) => Promise<void>;
+  removeNoteTag: (noteId: string, tagId: string) => Promise<void>;
   trashNote: (id: string) => Promise<void>;
   restoreNote: (id: string) => Promise<void>;
   deleteNotePermanently: (id: string) => Promise<void>;
@@ -133,7 +133,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [encryptionReady, setEncryptionReady] = useState(false);
   const [sessionUnlocked, setSessionUnlocked] = useState(false);
   const notesRequest = useRef(0);
+  const tagsRequest = useRef(0);
   const view = useRef<{ mode: ViewMode; tagId: string | null }>({ mode: 'all', tagId: null });
+
+  const setViewMode = useCallback((mode: ViewMode, tagId: string | null = null) => {
+    if (view.current.mode !== mode || view.current.tagId !== tagId) {
+      ++notesRequest.current;
+      view.current = { mode, tagId };
+    }
+    dispatch({ type: 'SET_VIEW_MODE', mode, tagId });
+  }, []);
 
   const refreshEncryptionState = useCallback(async () => {
     const [hasPassword, isUnlocked] = await Promise.all([
@@ -145,9 +154,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshTags = useCallback(async () => {
+    const request = ++tagsRequest.current;
     const tags = await api.tags.getAll();
+    if (request !== tagsRequest.current) return;
     dispatch({ type: 'SET_TAGS', tags });
-  }, []);
+    const { mode, tagId } = view.current;
+    if (mode === 'tag' && !tags.some((tag) => tag.id === tagId)) setViewMode('all');
+  }, [setViewMode]);
 
   const refreshNotes = useCallback(async () => {
     const request = ++notesRequest.current;
@@ -155,10 +168,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let notes: NoteSummary[];
     if (mode === 'trash') {
       notes = await api.notes.getTrashed();
-    } else if (mode === 'tag' && tagId) {
-      const noteIds = await api.tags.getNotesByTag(tagId);
-      const allNotes = await api.notes.getAll();
-      notes = allNotes.filter((n) => noteIds.includes(n.id));
+    } else if (mode === 'tag') {
+      notes = tagId ? await api.tags.getNotesByTag(tagId) : [];
     } else {
       notes = await api.notes.getAll();
     }
@@ -170,17 +181,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [refreshNotes, state.viewMode, state.selectedTagId]);
 
   useEffect(() => {
-    refreshTags();
+    void refreshTags().catch(reportError);
     refreshEncryptionState();
   }, [refreshTags, refreshEncryptionState]);
-
-  const setViewMode = useCallback((mode: ViewMode, tagId: string | null = null) => {
-    if (view.current.mode !== mode || view.current.tagId !== tagId) {
-      ++notesRequest.current;
-      view.current = { mode, tagId };
-    }
-    dispatch({ type: 'SET_VIEW_MODE', mode, tagId });
-  }, []);
 
   const createNote = useCallback(async () => {
     try {
@@ -249,26 +252,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addNoteTag = useCallback(
     async (noteId: string, tagName: string) => {
-      const currentTags = await api.tags.getByNoteId(noteId);
-      const tagNames = currentTags.map((t) => t.name);
-      if (!tagNames.includes(tagName)) {
-        tagNames.push(tagName);
-        await api.tags.setNoteTags(noteId, tagNames);
-        await refreshTags();
-      }
+      await api.tags.addNoteTag(noteId, tagName);
+      await refreshTags();
+      if (view.current.mode === 'tag') await refreshNotes();
     },
-    [refreshTags],
+    [refreshNotes, refreshTags],
   );
 
   const removeNoteTag = useCallback(
-    async (noteId: string, tagName: string) => {
-      const currentTags = await api.tags.getByNoteId(noteId);
-      const tagNames = currentTags.map((t) => t.name).filter((n) => n !== tagName);
-      await api.tags.setNoteTags(noteId, tagNames);
-      await api.tags.cleanupUnused();
+    async (noteId: string, tagId: string) => {
+      await api.tags.removeNoteTag(noteId, tagId);
       await refreshTags();
+      if (view.current.mode === 'tag') await refreshNotes();
     },
-    [refreshTags],
+    [refreshNotes, refreshTags],
   );
 
   const trashNote = useCallback(
@@ -276,9 +273,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       try {
         await api.notes.trash(id);
         if (view.current.mode !== 'trash') dispatch({ type: 'REMOVE_NOTE', id });
-        await refreshNotes();
-        await api.tags.cleanupUnused();
-        await refreshTags();
+        await Promise.all([refreshNotes(), refreshTags()]);
       } catch (error) {
         reportError(error);
       }
@@ -291,12 +286,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       try {
         await api.notes.restore(id);
         if (view.current.mode === 'trash') dispatch({ type: 'REMOVE_NOTE', id });
-        await refreshNotes();
+        await Promise.all([refreshNotes(), refreshTags()]);
       } catch (error) {
         reportError(error);
       }
     },
-    [refreshNotes],
+    [refreshNotes, refreshTags],
   );
 
   const deleteNotePermanently = useCallback(
@@ -304,9 +299,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       try {
         await api.notes.deletePermanently(id);
         dispatch({ type: 'REMOVE_NOTE', id });
-        await refreshNotes();
-        await api.tags.cleanupUnused();
-        await refreshTags();
+        await Promise.all([refreshNotes(), refreshTags()]);
       } catch (error) {
         reportError(error);
       }
@@ -317,16 +310,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const deleteTag = useCallback(
     async (tagId: string) => {
       await api.tags.delete(tagId);
-
-      // If currently viewing this tag, switch to all notes
-      if (state.selectedTagId === tagId) {
-        setViewMode('all');
-      }
-
       await refreshTags();
       await refreshNotes();
     },
-    [refreshTags, refreshNotes, setViewMode, state.selectedTagId],
+    [refreshTags, refreshNotes],
   );
 
   const renameTag = useCallback(

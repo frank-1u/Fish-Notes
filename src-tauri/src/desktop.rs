@@ -82,6 +82,18 @@ pub fn run() {
             commands::notes_restore,
             commands::notes_delete_permanently,
             commands::notes_toggle_pin,
+            commands::tags_get_all,
+            commands::tags_get_by_note_id,
+            commands::tags_get_notes_by_tag,
+            commands::tags_set_note_tags,
+            commands::tags_add_note_tag,
+            commands::tags_remove_note_tag,
+            commands::tags_cleanup_unused,
+            commands::tags_delete,
+            commands::tags_rename,
+            commands::tags_toggle_pin,
+            commands::tags_reorder,
+            commands::search_notes,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Fish Notes");

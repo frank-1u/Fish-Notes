@@ -1,8 +1,8 @@
-use rusqlite::{OptionalExtension, Row, ToSql};
+use rusqlite::{OptionalExtension, Row, ToSql, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{AppError, AppService};
+use crate::{tags::delete_unused_tags, AppError, AppService};
 
 pub(crate) const SUMMARY_COLUMNS: &str =
     "id, title, CASE WHEN is_locked THEN '' ELSE substr(content_text, 1, 80) END AS preview,
@@ -170,9 +170,11 @@ impl AppService {
     }
 
     pub fn delete_note_permanently(&self, id: &str) -> Result<(), AppError> {
-        self.database
-            .get()?
-            .execute("DELETE FROM notes WHERE id = ?1", [id])?;
+        let mut conn = self.database.get()?;
+        let transaction = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        transaction.execute("DELETE FROM notes WHERE id = ?1", [id])?;
+        delete_unused_tags(&transaction)?;
+        transaction.commit()?;
         Ok(())
     }
 }
