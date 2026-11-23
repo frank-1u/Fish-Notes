@@ -318,22 +318,26 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
           },
         );
         entry.stop = stream.abort;
+        let streamError: unknown;
         try {
           accumulated = (await stream.result).fullText;
+        } catch (error) {
+          streamError = error;
         } finally {
           if (entry.timer != null) {
             window.clearTimeout(entry.timer);
             publish();
           }
-          if (!entry.discard && accumulated.trim()) {
-            try {
-              await api.chats.addMessage(chatId, 'assistant', accumulated.trim());
-              void refreshChats();
-            } catch (error) {
-              if (!entry.discard) throw error;
-            }
+        }
+        if (!entry.discard && accumulated.trim()) {
+          try {
+            await api.chats.addMessage(chatId, 'assistant', accumulated.trim());
+            void refreshChats();
+          } catch (error) {
+            if (!entry.discard && streamError === undefined) throw error;
           }
         }
+        if (streamError !== undefined) throw streamError;
       } finally {
         if (streams.current.get(key) === entry) {
           streams.current.delete(key);

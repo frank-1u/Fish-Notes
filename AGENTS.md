@@ -9,6 +9,8 @@ Bear 风格的本地 Markdown 笔记应用。桌面端使用 Tauri v2 和 Rust�
 ```bash
 yarn install --frozen-lockfile
 yarn start                              # Tauri 开发窗口与 Vite HMR
+npx eslint --ext .ts,.tsx --quiet .
+yarn format:check
 npx tsc --noEmit
 npx vite build
 (cd src-tauri && cargo test --locked)
@@ -47,7 +49,7 @@ src-tauri/
 
 ## CI 与 Windows 验收
 
-PR、`main` 和 `feat/**` 推送触发 CI。Release 支持手动构建下载 Windows NSIS 安装包和便携 zip，并在匹配版本的 `v*` tag 上发布。macOS 独立验证 Overlay 标题栏构建，Windows 和 Linux 使用系统原生标题栏。
+CI 触发条件与检查项以 [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) 为准。Release 支持手动构建下载 Windows NSIS 安装包和便携 zip，并在匹配版本的 `v*` tag 上发布。macOS 独立验证 Overlay 标题栏构建，Windows 和 Linux 使用系统原生标题栏。
 
 Windows x64 真机验收覆盖两个包的全功能冒烟、核心交互流畅度，以及包体 ≤ 15 MB、冷启动至可交互 ≤ 1.0 秒、空载和日常编辑的应用与 WebView2 进程合计内存 ≤ 120 MB。打包、手动触发和验收步骤见 [README](./README.md#windows-host-acceptance)。
 

@@ -96,9 +96,13 @@ export default function FloatingBall() {
   const asleepRef = useRef(false);
   asleepRef.current = asleep;
   // grab offset within the ball + the pointer's start position (for click vs drag)
-  const drag = useRef<{ dx: number; dy: number; startX: number; startY: number; moved: boolean } | null>(
-    null,
-  );
+  const drag = useRef<{
+    dx: number;
+    dy: number;
+    startX: number;
+    startY: number;
+    moved: boolean;
+  } | null>(null);
 
   useEffect(() => {
     const onResize = () => setPos((p) => clamp(p));

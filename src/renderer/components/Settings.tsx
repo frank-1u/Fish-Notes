@@ -1,6 +1,8 @@
+import { getVersion } from '@tauri-apps/api/app';
+import { relaunch } from '@tauri-apps/plugin-process';
+import { check, type Update } from '@tauri-apps/plugin-updater';
 import { api, parseAppError, type AIConfig, type AiProtocol } from '../api';
-import { useState, useCallback, useEffect, useRef, Fragment } from 'react';
-import { createPortal } from 'react-dom';
+import { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAppActions, useEncryption } from '../contexts/AppContext';
@@ -45,6 +47,69 @@ function Settings({ onClose }: SettingsProps) {
   });
   const [aiHasKey, setAiHasKey] = useState(false);
   const [aiStatus, setAiStatus] = useState<'loading' | 'saving' | 'testing' | 'idle'>('loading');
+  const [appVersion, setAppVersion] = useState('');
+  const [updateStatus, setUpdateStatus] = useState<
+    'idle' | 'checking' | 'up-to-date' | 'available' | 'downloading' | 'installing'
+  >('idle');
+  const [availableUpdate, setAvailableUpdate] = useState<Update | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    getVersion()
+      .then((ver) => {
+        if (active) setAppVersion(ver);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleCheckUpdate = useCallback(async () => {
+    setUpdateStatus('checking');
+    setAvailableUpdate(null);
+    setDownloadProgress(null);
+    try {
+      const update = await check();
+      if (update) {
+        setAvailableUpdate(update);
+        setUpdateStatus('available');
+      } else {
+        setUpdateStatus('up-to-date');
+      }
+    } catch (error) {
+      setUpdateStatus('idle');
+      message.error(`${t('Failed to check for updates')}: ${parseAppError(error).message}`);
+    }
+  }, [t]);
+
+  const handleInstallUpdate = useCallback(async () => {
+    if (!availableUpdate) return;
+    setUpdateStatus('downloading');
+    setDownloadProgress(0);
+    let totalBytes = 0;
+    let downloadedBytes = 0;
+    try {
+      await availableUpdate.downloadAndInstall((event) => {
+        if (event.event === 'Started') {
+          totalBytes = event.data.contentLength ?? 0;
+        } else if (event.event === 'Progress') {
+          downloadedBytes += event.data.chunkLength;
+          if (totalBytes > 0) {
+            setDownloadProgress(Math.min(100, Math.round((downloadedBytes / totalBytes) * 100)));
+          }
+        } else if (event.event === 'Finished') {
+          setDownloadProgress(100);
+          setUpdateStatus('installing');
+        }
+      });
+      await relaunch();
+    } catch (error) {
+      setUpdateStatus('available');
+      message.error(parseAppError(error).message);
+    }
+  }, [availableUpdate]);
 
   useEffect(() => {
     let active = true;
@@ -683,6 +748,55 @@ function Settings({ onClose }: SettingsProps) {
                 </button>
               </div>
             </fieldset>
+          </div>
+
+          <div className="px-6 py-4 border-t" style={{ borderColor: 'var(--border-primary)' }}>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  {t('App Update')}
+                </h3>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+                  {t('Current version')}: {appVersion ? `v${appVersion}` : '—'}
+                  {updateStatus === 'up-to-date' && ` · ${t('Already up to date')}`}
+                  {updateStatus === 'available' &&
+                    availableUpdate &&
+                    ` · ${t('New version available')}: v${availableUpdate.version}`}
+                  {updateStatus === 'downloading' &&
+                    ` · ${t('Downloading...')}${downloadProgress !== null ? ` ${downloadProgress}%` : ''}`}
+                  {updateStatus === 'installing' && ` · ${t('Installing & restarting...')}`}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {updateStatus === 'available' && availableUpdate ? (
+                  <button
+                    type="button"
+                    onClick={handleInstallUpdate}
+                    className="px-3 py-1.5 rounded-lg text-xs text-white transition-colors"
+                    style={{ backgroundColor: '#f97316' }}
+                  >
+                    {t('Download & Install')}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleCheckUpdate}
+                    disabled={
+                      updateStatus === 'checking' ||
+                      updateStatus === 'downloading' ||
+                      updateStatus === 'installing'
+                    }
+                    className="px-3 py-1.5 rounded-lg text-xs border transition-colors disabled:opacity-60"
+                    style={{
+                      borderColor: 'var(--border-primary)',
+                      color: 'var(--text-secondary)',
+                    }}
+                  >
+                    {updateStatus === 'checking' ? t('Checking...') : t('Check for updates')}
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* /Scrollable body */}

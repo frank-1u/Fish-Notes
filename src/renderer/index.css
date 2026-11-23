@@ -107,8 +107,15 @@ body {
 
 /* AI assistant floating ball: breathing dot while streaming */
 @keyframes fish-breathe {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.4; transform: scale(0.7); }
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.7);
+  }
 }
 
 /* AI assistant: animated typing dots while waiting for the first token */

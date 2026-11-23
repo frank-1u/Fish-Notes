@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Fish Notes",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "identifier": "com.fishnotes.desktop",
   "build": {
     "beforeDevCommand": "yarn dev",
@@ -28,11 +28,18 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "icon": [
       "../src/assets/icon.iconset/icon_16x16@2x.png",
       "../src/assets/icon.iconset/icon_128x128@2x.png",
       "icons/icon.ico",
       "../src/assets/icon.icns"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI5QTcxRDdEOUZCRDU4QTQKUldTa1dMMmZmUjJudWZZbHV6NG93UVRPb0FOYy8vQ1Nnc3IyWDk2eU8rNWpDS05JTmM2MlF3dkgK",
+      "endpoints": ["https://github.com/frank-1u/Fish-Notes/releases/latest/download/latest.json"]
+    }
   }
 }

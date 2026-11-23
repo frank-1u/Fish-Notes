@@ -178,5 +178,15 @@
   "Drag to resize": "拖动调整大小",
   "Ask Fish about selection": "问 Fish（选中内容）",
   "AI Assistant": "AI 助手",
-  "Show floating assistant": "显示悬浮助手"
+  "Show floating assistant": "显示悬浮助手",
+  "App Update": "应用更新",
+  "Current version": "当前版本",
+  "Check for updates": "检查更新",
+  "Checking...": "检查中...",
+  "Already up to date": "已是最新版本",
+  "New version available": "发现新版本",
+  "Download & Install": "下载并安装",
+  "Downloading...": "下载中...",
+  "Installing & restarting...": "正在安装并重启...",
+  "Failed to check for updates": "检查更新失败"
 }

@@ -20,35 +20,35 @@ English · [简体中文](./README.zh-CN.md)
 
 Download the Windows x64 packages from [GitHub Releases](https://github.com/frank-1u/Fish-Notes/releases).
 
-| Package | File |
-| --- | --- |
-| NSIS installer | `*-setup.exe` |
-| Portable | `Fish-Notes-<version>-windows-x64-portable.zip` containing `fish-notes.exe` |
+| Package        | File                                                                        |
+| -------------- | --------------------------------------------------------------------------- |
+| NSIS installer | `*-setup.exe`                                                               |
+| Portable       | `Fish-Notes-<version>-windows-x64-portable.zip` containing `fish-notes.exe` |
 
 Fish Notes uses the system Microsoft Edge WebView2 Runtime. The installer downloads the WebView2 bootstrapper when needed. For the portable build, install WebView2 separately if it is missing.
 
 ## Screenshots
 
-|             Editor (split view)            |               Themes                |
-| :----------------------------------------: | :---------------------------------: |
-| ![Editor](./docs/screenshots/editor.png)  | ![Themes](./docs/screenshots/themes.png) |
+|           Editor (split view)            |                  Themes                  |
+| :--------------------------------------: | :--------------------------------------: |
+| ![Editor](./docs/screenshots/editor.png) | ![Themes](./docs/screenshots/themes.png) |
 
 ## Tech Stack
 
-| Layer            | Choice                                              |
-| ---------------- | --------------------------------------------------- |
-| Desktop          | Tauri v2 + Rust + system WebView               |
-| Frontend         | React 18 + TypeScript 5.7 + Vite 5                           |
-| UI / Styling     | Tailwind CSS 3 + CSS Variables                      |
-| Editor           | CodeMirror 6 (Markdown source + live highlighting)  |
-| Preview          | marked (GFM + breaks)                               |
-| Database         | Bundled SQLite via rusqlite, WAL, r2d2                        |
-| Full-text search | SQLite FTS5                                         |
-| Encryption       | AES-256-GCM + scrypt                                |
-| AI               | OpenAI-compatible and Anthropic Messages HTTP APIs    |
-| i18n             | i18next + react-i18next                             |
-| Export           | Markdown / sanitized HTML / system print to PDF |
-| Package manager  | Yarn Classic                                                |
+| Layer            | Choice                                             |
+| ---------------- | -------------------------------------------------- |
+| Desktop          | Tauri v2 + Rust + system WebView                   |
+| Frontend         | React 18 + TypeScript 5.7 + Vite 5                 |
+| UI / Styling     | Tailwind CSS 3 + CSS Variables                     |
+| Editor           | CodeMirror 6 (Markdown source + live highlighting) |
+| Preview          | marked (GFM + breaks)                              |
+| Database         | Bundled SQLite via rusqlite, WAL, r2d2             |
+| Full-text search | SQLite FTS5                                        |
+| Encryption       | AES-256-GCM + scrypt                               |
+| AI               | OpenAI-compatible and Anthropic Messages HTTP APIs |
+| i18n             | i18next + react-i18next                            |
+| Export           | Markdown / sanitized HTML / system print to PDF    |
+| Package manager  | Yarn Classic                                       |
 
 ## Features
 
@@ -103,33 +103,33 @@ Fish Notes uses the system Microsoft Edge WebView2 Runtime. The installer downlo
 
 ### Editor views
 
-| Shortcut       | Action       |
-| -------------- | ------------ |
-| `Cmd/Ctrl + 1` | MD source    |
-| `Cmd/Ctrl + 2` | Preview      |
-| `Cmd/Ctrl + 3` | Split        |
+| Shortcut       | Action    |
+| -------------- | --------- |
+| `Cmd/Ctrl + 1` | MD source |
+| `Cmd/Ctrl + 2` | Preview   |
+| `Cmd/Ctrl + 3` | Split     |
 
 ### Markdown formatting
 
-| Shortcut               | Action            |
-| ---------------------- | ----------------- |
-| `Cmd/Ctrl + B`         | Bold              |
-| `Cmd/Ctrl + I`         | Italic            |
-| `Cmd/Ctrl + Shift + S` | Strikethrough     |
-| `Cmd/Ctrl + 1~6`       | Heading 1–6       |
-| `Cmd/Ctrl + K`         | Link              |
-| `Cmd/Ctrl + E`         | Inline code       |
-| `Cmd/Ctrl + Shift + E` | Code block        |
-| `Cmd/Ctrl + Shift + .` | Blockquote        |
-| `Cmd/Ctrl + Shift + L` | Bullet list       |
-| `Cmd/Ctrl + Shift + O` | Numbered list     |
-| `Cmd/Ctrl + Shift + T` | Task list         |
+| Shortcut               | Action        |
+| ---------------------- | ------------- |
+| `Cmd/Ctrl + B`         | Bold          |
+| `Cmd/Ctrl + I`         | Italic        |
+| `Cmd/Ctrl + Shift + S` | Strikethrough |
+| `Cmd/Ctrl + 1~6`       | Heading 1–6   |
+| `Cmd/Ctrl + K`         | Link          |
+| `Cmd/Ctrl + E`         | Inline code   |
+| `Cmd/Ctrl + Shift + E` | Code block    |
+| `Cmd/Ctrl + Shift + .` | Blockquote    |
+| `Cmd/Ctrl + Shift + L` | Bullet list   |
+| `Cmd/Ctrl + Shift + O` | Numbered list |
+| `Cmd/Ctrl + Shift + T` | Task list     |
 
 ### App
 
-| Shortcut       | Action     |
-| -------------- | ---------- |
-| `Cmd/Ctrl + S` | Save now   |
+| Shortcut       | Action   |
+| -------------- | -------- |
+| `Cmd/Ctrl + S` | Save now |
 
 ## Development
 
