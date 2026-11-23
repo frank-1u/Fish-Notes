@@ -47,6 +47,7 @@
     "@codemirror/state": "^6.5.0",
     "@codemirror/view": "^6.35.3",
     "@lezer/highlight": "^1.2.1",
+    "@tanstack/react-virtual": "^3",
     "@tauri-apps/api": "^2.12.5",
     "@tauri-apps/plugin-opener": "^2.7.3",
     "codemirror": "^6.0.1",

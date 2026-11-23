@@ -3,7 +3,7 @@ import { useState, useCallback, useEffect, useRef, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../contexts/ThemeContext';
-import { useApp } from '../contexts/AppContext';
+import { useAppActions, useEncryption } from '../contexts/AppContext';
 import { message } from './message';
 import { modal } from './modal';
 import { isAssistantEnabled, setAssistantEnabled } from './assistant/Assistant';
@@ -27,8 +27,8 @@ const AI_INPUT_STYLE = {
 function Settings({ onClose }: SettingsProps) {
   const { t, i18n } = useTranslation();
   const { theme, setTheme } = useTheme();
-  const { encryptionReady, sessionUnlocked, refreshEncryptionState, refreshNotes, lockAllNotes } =
-    useApp();
+  const { encryptionReady, sessionUnlocked } = useEncryption();
+  const { refreshEncryptionState, refreshNotes, lockAllNotes } = useAppActions();
 
   const [passwordView, setPasswordView] = useState<'none' | 'set' | 'change' | 'remove'>('none');
   const [password, setPassword] = useState('');

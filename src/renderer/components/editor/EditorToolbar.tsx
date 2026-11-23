@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, type ReactNode } from 'react';
+import { memo, useState, useRef, useEffect, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { EditorView } from '@codemirror/view';
 import Tooltip from '../Tooltip';
@@ -364,7 +364,7 @@ function ToolbarButton({
   );
 }
 
-export default function EditorToolbar({ getView }: EditorToolbarProps) {
+function EditorToolbar({ getView }: EditorToolbarProps) {
   return (
     <div
       className="flex items-center gap-0.5 px-2 py-1 shrink-0"
@@ -398,3 +398,5 @@ export default function EditorToolbar({ getView }: EditorToolbarProps) {
     </div>
   );
 }
+
+export default memo(EditorToolbar);

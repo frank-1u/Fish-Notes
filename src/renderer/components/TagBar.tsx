@@ -1,7 +1,7 @@
 import { api, parseAppError, type TagData } from '../api';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useApp } from '../contexts/AppContext';
+import { useAppActions, useTags } from '../contexts/AppContext';
 import { message } from './message';
 
 interface TagBarProps {
@@ -10,7 +10,8 @@ interface TagBarProps {
 
 function TagBar({ noteId }: TagBarProps) {
   const { t } = useTranslation();
-  const { state, addNoteTag, removeNoteTag } = useApp();
+  const { addNoteTag, removeNoteTag } = useAppActions();
+  const tags = useTags();
   const [loadedTags, setLoadedTags] = useState<{ noteId: string; tags: TagData[] }>();
   const noteTags = loadedTags?.noteId === noteId ? loadedTags.tags : [];
   const [showPopup, setShowPopup] = useState(false);
@@ -32,7 +33,7 @@ function TagBar({ noteId }: TagBarProps) {
     return () => {
       active = false;
     };
-  }, [noteId, state.tags]);
+  }, [noteId, tags]);
 
   // Close popup on outside click
   useEffect(() => {
@@ -95,7 +96,7 @@ function TagBar({ noteId }: TagBarProps) {
 
   // Filter existing tags for suggestions (exclude already-added ones)
   const noteTagNames = noteTags.map((t) => t.name);
-  const suggestions = state.tags
+  const suggestions = tags
     .filter((t) => !noteTagNames.includes(t.name))
     .filter((t) => !inputValue || t.name.toLowerCase().includes(inputValue.toLowerCase()));
 

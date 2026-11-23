@@ -1,11 +1,11 @@
-import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { api, AppError, parseAppError, type NoteData } from '../api';
 import Sidebar from './Sidebar';
 import NoteList from './NoteList';
 import Editor from './Editor';
 import SearchBar from './SearchBar';
 import Settings from './Settings';
-import { useApp } from '../contexts/AppContext';
+import { useAppActions, useNoteSelection, useSelectedNoteLocked } from '../contexts/AppContext';
 
 const SIDEBAR_MIN = 180;
 const SIDEBAR_MAX = 350;
@@ -20,43 +20,7 @@ function Layout() {
   const sidebarWidthRef = useRef(sidebarWidth);
   const noteListWidthRef = useRef(noteListWidth);
 
-  const { state, updateNoteContent, createNote } = useApp();
-  const { notes, selectedNoteId } = state;
-
-  const selectedNote = useMemo(
-    () => notes.find((n) => n.id === selectedNoteId) ?? null,
-    [notes, selectedNoteId],
-  );
-  const isLocked = selectedNote?.isLocked ?? false;
-  const [loadedNote, setLoadedNote] = useState<{
-    id: string;
-    isLocked: boolean;
-    data?: NoteData;
-    error?: string;
-  } | null>(null);
-
-  useEffect(() => {
-    setLoadedNote(null);
-    if (!selectedNoteId) return;
-
-    let active = true;
-    void api.notes
-      .get(selectedNoteId)
-      .then((data) => {
-        if (!data) throw new AppError('note_not_found', 'Note not found.');
-        if (active) setLoadedNote({ id: selectedNoteId, isLocked, data });
-      })
-      .catch((error: unknown) => {
-        if (active)
-          setLoadedNote({ id: selectedNoteId, isLocked, error: parseAppError(error).message });
-      });
-    return () => {
-      active = false;
-    };
-  }, [selectedNoteId, isLocked]);
-
-  const current =
-    loadedNote?.id === selectedNoteId && loadedNote.isLocked === isLocked ? loadedNote : null;
+  const { createNote } = useAppActions();
 
   const openSearch = useCallback(() => setShowSearch(true), []);
   const closeSearch = useCallback(() => setShowSearch(false), []);
@@ -151,18 +115,57 @@ function Layout() {
         onSettingsClick={openSettings}
       />
       <NoteList width={noteListWidth} onResizeStart={handleNoteListMouseDown} />
-      <Editor
-        noteId={current?.data?.id ?? null}
-        title={current?.data?.title ?? ''}
-        content={current?.data?.content ?? ''}
-        isLocked={current?.data?.isLocked ?? isLocked}
-        loading={selectedNoteId !== null && current === null}
-        loadError={current?.error}
-        onContentChange={updateNoteContent}
-      />
+      <SelectedNoteEditor />
       {showSearch && <SearchBar onClose={closeSearch} />}
       {showSettings && <Settings onClose={closeSettings} />}
     </div>
+  );
+}
+
+function SelectedNoteEditor() {
+  const { updateNoteContent } = useAppActions();
+  const { selectedNoteId } = useNoteSelection();
+  const isLocked = useSelectedNoteLocked();
+  const [loadedNote, setLoadedNote] = useState<{
+    id: string;
+    isLocked: boolean;
+    data?: NoteData;
+    error?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    setLoadedNote(null);
+    if (!selectedNoteId) return;
+
+    let active = true;
+    void api.notes
+      .get(selectedNoteId)
+      .then((data) => {
+        if (!data) throw new AppError('note_not_found', 'Note not found.');
+        if (active) setLoadedNote({ id: selectedNoteId, isLocked, data });
+      })
+      .catch((error: unknown) => {
+        if (active)
+          setLoadedNote({ id: selectedNoteId, isLocked, error: parseAppError(error).message });
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedNoteId, isLocked]);
+
+  const current =
+    loadedNote?.id === selectedNoteId && loadedNote.isLocked === isLocked ? loadedNote : null;
+
+  return (
+    <Editor
+      noteId={current?.data?.id ?? null}
+      title={current?.data?.title ?? ''}
+      content={current?.data?.content ?? ''}
+      isLocked={current?.data?.isLocked ?? isLocked}
+      loading={selectedNoteId !== null && current === null}
+      loadError={current?.error}
+      onContentChange={updateNoteContent}
+    />
   );
 }
 

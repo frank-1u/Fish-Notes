@@ -2,14 +2,14 @@ import { isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { api, parseAppError } from '../api';
 import { printNote } from '../utils/printNote';
-import React, { useCallback, useState, useRef, useEffect } from 'react';
+import React, { useCallback, useState, useRef, useEffect, useLayoutEffect } from 'react';
+import type { Text } from '@codemirror/state';
 import { useTranslation } from 'react-i18next';
 import MarkdownEditor from './editor/MarkdownEditor';
 import TagBar from './TagBar';
 import PasswordPrompt from './PasswordPrompt';
 import { useAutoSave } from '../hooks/useAutoSave';
-import { useApp } from '../contexts/AppContext';
-import { useTheme } from '../contexts/ThemeContext';
+import { useAppActions, useEncryption } from '../contexts/AppContext';
 import { message } from './message';
 
 interface EditorProps {
@@ -31,20 +31,18 @@ function Editor({
   loadError,
   onContentChange,
 }: EditorProps) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { save, flush } = useAutoSave(500);
   const { save: saveTitle, flush: flushTitle } = useAutoSave(500);
   const {
     updateNoteTitle,
-    sessionUnlocked,
     verifyPassword,
-    encryptionReady,
     lockNote,
     unlockNote,
     refreshEncryptionState,
     registerNoteEditFlush,
-  } = useApp();
-  const { resolvedTheme } = useTheme();
+  } = useAppActions();
+  const { encryptionReady, sessionUnlocked } = useEncryption();
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [localTitle, setLocalTitle] = useState(title);
   const [suggestingTitle, setSuggestingTitle] = useState(false);
@@ -52,16 +50,15 @@ function Editor({
   const menuRef = useRef<HTMLDivElement>(null);
   const titleRequest = useRef(0);
 
-  const [decrypted, setDecrypted] = useState(false);
+  const [decrypted, setDecrypted] = useState<string | null>(null);
   const [decryptError, setDecryptError] = useState<string | null>(null);
 
-  const lastContentRef = useRef(content);
-  const prevNoteIdRef = useRef(noteId);
-  if (noteId !== prevNoteIdRef.current) {
-    lastContentRef.current = content;
-    prevNoteIdRef.current = noteId;
+  const editedDoc = useRef<Text | null>(null);
+  const [previousNoteId, setPreviousNoteId] = useState(noteId);
+  if (noteId !== previousNoteId) {
+    setPreviousNoteId(noteId);
     setLocalTitle(title);
-    setDecrypted(false);
+    setDecrypted(null);
     setDecryptError(null);
     setShowExportMenu(false);
     titleRequest.current += 1;
@@ -73,8 +70,7 @@ function Editor({
   useEffect(() => {
     if (!noteId || !isLocked) return;
     if (!sessionUnlocked) {
-      lastContentRef.current = '';
-      setDecrypted(false);
+      setDecrypted(null);
       setDecryptError(null);
       setShowExportMenu(false);
       setTitleCandidate(null);
@@ -85,8 +81,7 @@ function Editor({
       .getDecrypted(noteId)
       .then((note) => {
         if (cancelled) return;
-        lastContentRef.current = note.content;
-        setDecrypted(true);
+        setDecrypted(note.content);
       })
       .catch((error: unknown) => {
         if (cancelled) return;
@@ -108,8 +103,21 @@ function Editor({
     flushTitle();
   }, [flush, flushTitle]);
 
-  useEffect(() => flushPending, [noteId, flushPending]);
-  useEffect(() => registerNoteEditFlush(flushPending), [registerNoteEditFlush, flushPending]);
+  const canRead = !isLocked || (sessionUnlocked && decrypted !== null);
+  const activeNoteId = canRead ? noteId : null;
+  const defaultValue = activeNoteId ? (isLocked ? (decrypted ?? '') : content) : '';
+
+  useLayoutEffect(() => {
+    editedDoc.current = null;
+    return flushPending;
+  }, [activeNoteId, defaultValue, flushPending]);
+
+  useLayoutEffect(() => registerNoteEditFlush(flushPending), [registerNoteEditFlush, flushPending]);
+
+  const readContent = useCallback(
+    () => editedDoc.current?.toString() ?? defaultValue,
+    [defaultValue],
+  );
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -146,15 +154,15 @@ function Editor({
   );
 
   const handleChange = useCallback(
-    (md: string) => {
-      if (!noteId) return;
-      if (md === lastContentRef.current) return;
-      lastContentRef.current = md;
+    (doc: Text) => {
+      if (!activeNoteId) return;
+      editedDoc.current = doc;
+      // Text is immutable, so a pending save still belongs to this note after setState.
       save(() => {
-        onContentChange?.(noteId, md);
+        onContentChange?.(activeNoteId, doc.toString());
       });
     },
-    [noteId, save, onContentChange],
+    [activeNoteId, save, onContentChange],
   );
 
   // Close menu on outside click
@@ -169,23 +177,23 @@ function Editor({
     return () => document.removeEventListener('mousedown', handler);
   }, [showExportMenu]);
 
-  const canRead = !isLocked || (sessionUnlocked && decrypted);
   const handleExport = useCallback(
     async (format: 'markdown' | 'html' | 'pdf') => {
       setShowExportMenu(false);
       if (!noteId || !canRead) return;
       const title = localTitle.trim() ? localTitle : t('Untitled');
       try {
+        const currentContent = readContent();
         if (format === 'pdf') {
-          await printNote(title, lastContentRef.current);
+          await printNote(title, currentContent);
         } else {
-          await api.export[format](title, lastContentRef.current);
+          await api.export[format](title, currentContent);
         }
       } catch (error) {
         message.error(parseAppError(error).message);
       }
     },
-    [noteId, canRead, localTitle, t],
+    [noteId, canRead, localTitle, readContent, t],
   );
 
   const handleVerify = useCallback(
@@ -206,7 +214,7 @@ function Editor({
 
   const handleSuggestTitle = useCallback(async () => {
     if (!noteId || suggestingTitle) return;
-    const source = canRead ? lastContentRef.current : '';
+    const source = canRead ? readContent() : '';
     if (!source.trim()) {
       message.warning(t('Note is empty'));
       return;
@@ -223,7 +231,7 @@ function Editor({
     } finally {
       if (titleRequest.current === request) setSuggestingTitle(false);
     }
-  }, [noteId, suggestingTitle, canRead, t]);
+  }, [noteId, suggestingTitle, canRead, readContent, t]);
 
   const handleAcceptTitle = useCallback(() => {
     if (!noteId || !titleCandidate) return;
@@ -444,14 +452,6 @@ function Editor({
 
             {/* Row 2: Tags */}
             <TagBar noteId={noteId} />
-
-            {/* Row 3: Markdown editor */}
-            <MarkdownEditor
-              key={`${noteId}-${resolvedTheme}-${i18n.language}`}
-              defaultValue={lastContentRef.current}
-              onChange={handleChange}
-              onSave={flushPending}
-            />
           </>
         )
       ) : (
@@ -463,6 +463,14 @@ function Editor({
             (loading ? t('Loading note...') : t('Select or create a note to start writing'))}
         </div>
       )}
+      <div className={activeNoteId ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
+        <MarkdownEditor
+          noteId={activeNoteId}
+          defaultValue={defaultValue}
+          onChange={handleChange}
+          onSave={flushPending}
+        />
+      </div>
     </div>
   );
 }
