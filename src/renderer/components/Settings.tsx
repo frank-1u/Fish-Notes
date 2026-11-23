@@ -1,4 +1,4 @@
-import { api } from '../api';
+import { api, parseAppError } from '../api';
 import { useState, useCallback, useEffect, useRef, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
@@ -226,11 +226,16 @@ function Settings({ onClose }: SettingsProps) {
       return;
     }
     setLoading(true);
-    await api.encryption.setPassword(password);
-    await refreshEncryptionState();
-    resetForm();
-    setLoading(false);
-    message.success(t('Password set'));
+    try {
+      await api.encryption.setPassword(password);
+      await refreshEncryptionState();
+      resetForm();
+      message.success(t('Password set'));
+    } catch (error) {
+      message.error(parseAppError(error).message);
+    } finally {
+      setLoading(false);
+    }
   }, [password, confirmPassword, refreshEncryptionState, resetForm, t]);
 
   const handleChangePassword = useCallback(async () => {
@@ -247,16 +252,19 @@ function Settings({ onClose }: SettingsProps) {
       return;
     }
     setLoading(true);
-    const ok = await api.encryption.changePassword(oldPassword, password);
-    if (!ok) {
-      message.error(t('Current password is incorrect'));
+    try {
+      if (!(await api.encryption.changePassword(oldPassword, password))) {
+        message.error(t('Current password is incorrect'));
+        return;
+      }
+      await refreshEncryptionState();
+      resetForm();
+      message.success(t('Password changed'));
+    } catch (error) {
+      message.error(parseAppError(error).message);
+    } finally {
       setLoading(false);
-      return;
     }
-    await refreshEncryptionState();
-    resetForm();
-    setLoading(false);
-    message.success(t('Password changed'));
   }, [oldPassword, password, confirmPassword, refreshEncryptionState, resetForm, t]);
 
   const handleRemovePassword = useCallback(async () => {
@@ -265,17 +273,20 @@ function Settings({ onClose }: SettingsProps) {
       return;
     }
     setLoading(true);
-    const ok = await api.encryption.removePassword(password);
-    if (!ok) {
-      message.error(t('Incorrect password'));
+    try {
+      if (!(await api.encryption.removePassword(password))) {
+        message.error(t('Incorrect password'));
+        return;
+      }
+      await refreshEncryptionState();
+      await refreshNotes();
+      resetForm();
+      message.success(t('Encryption removed'));
+    } catch (error) {
+      message.error(parseAppError(error).message);
+    } finally {
       setLoading(false);
-      return;
     }
-    await refreshEncryptionState();
-    await refreshNotes();
-    resetForm();
-    setLoading(false);
-    message.success(t('Encryption removed'));
   }, [password, refreshEncryptionState, refreshNotes, resetForm, t]);
 
   const handleLanguageChange = useCallback(

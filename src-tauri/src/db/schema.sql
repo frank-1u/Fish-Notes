@@ -50,25 +50,33 @@ CREATE INDEX IF NOT EXISTS idx_notes_list
 CREATE INDEX IF NOT EXISTS idx_note_tags_tag_id ON note_tags(tag_id);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_chat_id ON chat_messages(chat_id);
 
+CREATE VIEW IF NOT EXISTS notes_fts_content AS
+    SELECT rowid, title, content_text FROM notes WHERE NOT is_locked;
+
 CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
-    title, content_text, content = 'notes', content_rowid = 'rowid'
+    title, content_text, content = 'notes_fts_content', content_rowid = 'rowid'
 );
 
-CREATE TRIGGER IF NOT EXISTS notes_ai AFTER INSERT ON notes BEGIN
+CREATE TRIGGER IF NOT EXISTS notes_ai AFTER INSERT ON notes
+WHEN NOT new.is_locked
+BEGIN
     INSERT INTO notes_fts(rowid, title, content_text)
         VALUES (new.rowid, new.title, new.content_text);
 END;
 
-CREATE TRIGGER IF NOT EXISTS notes_ad AFTER DELETE ON notes BEGIN
-    INSERT INTO notes_fts(notes_fts, rowid, title, content_text)
-        VALUES ('delete', old.rowid, old.title, old.content_text);
-END;
-
-CREATE TRIGGER IF NOT EXISTS notes_au AFTER UPDATE OF title, content_text ON notes
-WHEN old.title IS NOT new.title OR old.content_text IS NOT new.content_text
+CREATE TRIGGER IF NOT EXISTS notes_ad AFTER DELETE ON notes
+WHEN NOT old.is_locked
 BEGIN
     INSERT INTO notes_fts(notes_fts, rowid, title, content_text)
         VALUES ('delete', old.rowid, old.title, old.content_text);
+END;
+
+CREATE TRIGGER IF NOT EXISTS notes_au AFTER UPDATE OF title, content_text, is_locked ON notes
+WHEN old.is_locked IS NOT new.is_locked
+  OR (NOT new.is_locked AND (old.title IS NOT new.title OR old.content_text IS NOT new.content_text))
+BEGIN
+    INSERT INTO notes_fts(notes_fts, rowid, title, content_text)
+        SELECT 'delete', old.rowid, old.title, old.content_text WHERE NOT old.is_locked;
     INSERT INTO notes_fts(rowid, title, content_text)
-        VALUES (new.rowid, new.title, new.content_text);
+        SELECT new.rowid, new.title, new.content_text WHERE NOT new.is_locked;
 END;

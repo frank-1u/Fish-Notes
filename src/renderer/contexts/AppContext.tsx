@@ -116,6 +116,7 @@ interface AppContextValue {
   verifyPassword: (password: string) => Promise<boolean>;
   lockAllNotes: () => Promise<void>;
   refreshEncryptionState: () => Promise<void>;
+  registerNoteEditFlush: (flush: () => void) => () => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -132,6 +133,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const [encryptionReady, setEncryptionReady] = useState(false);
   const [sessionUnlocked, setSessionUnlocked] = useState(false);
+  const noteEditFlush = useRef<(() => void) | null>(null);
   const notesRequest = useRef(0);
   const view = useRef<{ mode: ViewMode; tagId: string | null }>({ mode: 'all', tagId: null });
 
@@ -171,7 +173,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     refreshTags();
-    refreshEncryptionState();
+    void refreshEncryptionState().catch(reportError);
   }, [refreshTags, refreshEncryptionState]);
 
   const setViewMode = useCallback((mode: ViewMode, tagId: string | null = null) => {
@@ -363,16 +365,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const registerNoteEditFlush = useCallback((flush: () => void) => {
+    noteEditFlush.current = flush;
+    return () => {
+      noteEditFlush.current = null;
+    };
+  }, []);
+
   const lockNote = useCallback(async (id: string) => {
-    await api.notes.lock(id);
-    dispatch({ type: 'UPDATE_NOTE', id, data: { isLocked: true, preview: '' } });
+    try {
+      noteEditFlush.current?.();
+      const data = await api.notes.lock(id);
+      dispatch({ type: 'UPDATE_NOTE', id, data });
+    } catch (error) {
+      reportError(error);
+    }
   }, []);
 
   const unlockNote = useCallback(async (id: string) => {
-    await api.notes.unlock(id);
-    const note = await api.notes.get(id);
-    if (note) {
-      dispatch({ type: 'UPDATE_NOTE', id, data: { isLocked: false, preview: note.preview } });
+    try {
+      noteEditFlush.current?.();
+      const data = await api.notes.unlock(id);
+      dispatch({ type: 'UPDATE_NOTE', id, data });
+    } catch (error) {
+      reportError(error);
     }
   }, []);
 
@@ -385,10 +401,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const lockAllNotes = useCallback(async () => {
-    await api.encryption.lockAll();
-    setSessionUnlocked(false);
-    await refreshNotes();
-  }, [refreshNotes]);
+    try {
+      noteEditFlush.current?.();
+      await api.notes.waitForWrites();
+      await api.encryption.lockAll();
+      setSessionUnlocked(false);
+    } catch (error) {
+      reportError(error);
+    }
+  }, []);
 
   const value = useMemo<AppContextValue>(
     () => ({
@@ -418,6 +439,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       verifyPassword,
       lockAllNotes,
       refreshEncryptionState,
+      registerNoteEditFlush,
     }),
     [
       state,
@@ -446,6 +468,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       verifyPassword,
       lockAllNotes,
       refreshEncryptionState,
+      registerNoteEditFlush,
     ],
   );
 

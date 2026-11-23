@@ -2,8 +2,10 @@ use tauri::State;
 
 use crate::AppError;
 
+mod encryption;
 mod notes;
 
+pub(crate) use encryption::*;
 pub(crate) use notes::*;
 
 async fn run_blocking<T: Send + 'static>(

@@ -1,26 +1,14 @@
-import { unavailable } from './client';
+import { invokeCommand } from './client';
 
-// T3 replaces these placeholders.
 export const encryption = {
-  async hasPassword(): Promise<boolean> {
-    return false;
-  },
-  async isUnlocked(): Promise<boolean> {
-    return false;
-  },
-  async verifyPassword(_password: string): Promise<boolean> {
-    throw unavailable('Note encryption');
-  },
-  async setPassword(_password: string): Promise<boolean> {
-    throw unavailable('Note encryption');
-  },
-  async changePassword(_oldPassword: string, _newPassword: string): Promise<boolean> {
-    throw unavailable('Note encryption');
-  },
-  async removePassword(_password: string): Promise<boolean> {
-    throw unavailable('Note encryption');
-  },
-  async lockAll(): Promise<boolean> {
-    throw unavailable('Note encryption');
-  },
+  hasPassword: () => invokeCommand<boolean>('encryption_has_password'),
+  isUnlocked: () => invokeCommand<boolean>('encryption_is_unlocked'),
+  verifyPassword: (password: string) =>
+    invokeCommand<boolean>('encryption_verify_password', { password }),
+  setPassword: (password: string) => invokeCommand<void>('encryption_set_password', { password }),
+  changePassword: (oldPassword: string, newPassword: string) =>
+    invokeCommand<boolean>('encryption_change_password', { oldPassword, newPassword }),
+  removePassword: (password: string) =>
+    invokeCommand<boolean>('encryption_remove_password', { password }),
+  lockAll: () => invokeCommand<void>('encryption_lock_all'),
 };

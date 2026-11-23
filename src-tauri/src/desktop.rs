@@ -73,6 +73,16 @@ pub fn run() {
             commands::notes_restore,
             commands::notes_delete_permanently,
             commands::notes_toggle_pin,
+            commands::notes_lock,
+            commands::notes_unlock,
+            commands::notes_get_decrypted,
+            commands::encryption_has_password,
+            commands::encryption_is_unlocked,
+            commands::encryption_set_password,
+            commands::encryption_verify_password,
+            commands::encryption_change_password,
+            commands::encryption_remove_password,
+            commands::encryption_lock_all,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Fish Notes");

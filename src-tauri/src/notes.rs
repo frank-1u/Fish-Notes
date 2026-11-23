@@ -1,8 +1,11 @@
-use rusqlite::{OptionalExtension, Row, ToSql};
+use rusqlite::{params, Connection, OptionalExtension, Row, ToSql, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{AppError, AppService};
+use crate::{
+    crypto::{NoteBody, SessionKey},
+    AppError, AppService,
+};
 
 pub(crate) const SUMMARY_COLUMNS: &str =
     "id, title, CASE WHEN is_locked THEN '' ELSE substr(content_text, 1, 80) END AS preview,
@@ -54,6 +57,14 @@ impl NoteData {
             content_text: row.get("content_text")?,
         })
     }
+
+    fn load(conn: &Connection, id: &str) -> Result<Self, AppError> {
+        let query =
+            format!("SELECT {SUMMARY_COLUMNS}, content, content_text FROM notes WHERE id = ?1");
+        conn.query_row(&query, [id], Self::from_row)
+            .optional()?
+            .ok_or(AppError::NoteNotFound)
+    }
 }
 
 #[derive(Default, Deserialize)]
@@ -100,19 +111,38 @@ impl AppService {
         Ok(notes)
     }
 
-    pub fn update_note(&self, id: &str, data: NoteUpdate) -> Result<NoteSummary, AppError> {
+    pub fn update_note(&self, id: &str, mut data: NoteUpdate) -> Result<NoteSummary, AppError> {
+        let session = self.session_key.read().map_err(|_| AppError::Encryption)?;
+        let mut conn = self.database.get()?;
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        if data.content.is_some() || data.content_text.is_some() {
+            let ciphertext: Option<String> = tx
+                .query_row(
+                    "SELECT content FROM notes WHERE id = ?1 AND is_locked",
+                    [id],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            if let Some(ciphertext) = ciphertext {
+                let key = SessionKey::require(&session, &tx)?;
+                let mut body = NoteBody::decrypt(key, id, &ciphertext)?;
+                if let Some(content) = data.content.take() {
+                    body.content = content;
+                }
+                if let Some(content_text) = data.content_text.take() {
+                    body.content_text = content_text;
+                }
+                data.content = Some(body.encrypt(key, id)?);
+                data.content_text = Some(String::new());
+            }
+        }
+
         let mut assignments = Vec::new();
         let mut params: Vec<&dyn ToSql> = Vec::new();
         for (assignment, value) in [
             ("title = ?", &data.title),
-            (
-                "content = CASE WHEN is_locked THEN content ELSE ? END",
-                &data.content,
-            ),
-            (
-                "content_text = CASE WHEN is_locked THEN content_text ELSE ? END",
-                &data.content_text,
-            ),
+            ("content = ?", &data.content),
+            ("content_text = ?", &data.content_text),
         ] {
             if let Some(value) = value {
                 assignments.push(assignment);
@@ -131,11 +161,67 @@ impl AppService {
         };
         params.push(&id);
 
-        self.database
-            .get()?
+        let summary = tx
             .query_row(&query, params.as_slice(), NoteSummary::from_row)
             .optional()?
-            .ok_or(AppError::NoteNotFound)
+            .ok_or(AppError::NoteNotFound)?;
+        tx.commit()?;
+        Ok(summary)
+    }
+
+    pub fn lock_note(&self, id: &str) -> Result<NoteSummary, AppError> {
+        self.set_note_protection(id, true)
+    }
+
+    pub fn unlock_note(&self, id: &str) -> Result<NoteSummary, AppError> {
+        self.set_note_protection(id, false)
+    }
+
+    fn set_note_protection(&self, id: &str, locked: bool) -> Result<NoteSummary, AppError> {
+        let session = self.session_key.read().map_err(|_| AppError::Encryption)?;
+        let mut conn = self.database.get()?;
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let key = SessionKey::require(&session, &tx)?;
+        let note = NoteData::load(&tx, id)?;
+        if note.summary.is_locked == locked {
+            return Ok(note.summary);
+        }
+        let (content, content_text) = if locked {
+            let plaintext = NoteBody {
+                content: note.content,
+                content_text: note.content_text,
+            };
+            (plaintext.encrypt(key, id)?, String::new())
+        } else {
+            let body = NoteBody::decrypt(key, id, &note.content)?;
+            (body.content, body.content_text)
+        };
+        let query = format!(
+            "UPDATE notes SET content = ?1, content_text = ?2, is_locked = ?3
+             WHERE id = ?4 RETURNING {SUMMARY_COLUMNS}"
+        );
+        let summary = tx.query_row(
+            &query,
+            params![content, content_text, locked, id],
+            NoteSummary::from_row,
+        )?;
+        tx.commit()?;
+        Ok(summary)
+    }
+
+    pub fn get_decrypted_note(&self, id: &str) -> Result<NoteData, AppError> {
+        let session = self.session_key.read().map_err(|_| AppError::Encryption)?;
+        let mut conn = self.database.get()?;
+        let tx = conn.transaction()?;
+        let key = SessionKey::require(&session, &tx)?;
+        let mut note = NoteData::load(&tx, id)?;
+        if note.summary.is_locked {
+            let body = NoteBody::decrypt(key, id, &note.content)?;
+            note.content = body.content;
+            note.content_text = body.content_text;
+        }
+        tx.commit()?;
+        Ok(note)
     }
 
     pub fn toggle_note_pin(&self, id: &str) -> Result<bool, AppError> {

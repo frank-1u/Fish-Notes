@@ -23,7 +23,24 @@ pub(crate) fn open(data_dir: &Path) -> Result<Database, AppError> {
     let mut conn = pool.get()?;
     conn.pragma_update(None, "journal_mode", "WAL")?;
     let transaction = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let legacy_fts: bool = transaction.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name = 'notes_fts')
+            AND NOT EXISTS(SELECT 1 FROM sqlite_schema WHERE name = 'notes_fts_content')",
+        [],
+        |row| row.get(0),
+    )?;
+    if legacy_fts {
+        transaction.execute_batch(
+            "DROP TRIGGER IF EXISTS notes_ai;
+             DROP TRIGGER IF EXISTS notes_ad;
+             DROP TRIGGER IF EXISTS notes_au;
+             DROP TABLE notes_fts;",
+        )?;
+    }
     transaction.execute_batch(include_str!("schema.sql"))?;
+    if legacy_fts {
+        transaction.execute("INSERT INTO notes_fts(notes_fts) VALUES ('rebuild')", [])?;
+    }
     transaction.commit()?;
 
     Ok(pool)

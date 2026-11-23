@@ -155,7 +155,7 @@ function Layout() {
         noteId={current?.data?.id ?? null}
         title={current?.data?.title ?? ''}
         content={current?.data?.content ?? ''}
-        isLocked={isLocked}
+        isLocked={current?.data?.isLocked ?? isLocked}
         loading={selectedNoteId !== null && current === null}
         loadError={current?.error}
         onContentChange={updateNoteContent}
