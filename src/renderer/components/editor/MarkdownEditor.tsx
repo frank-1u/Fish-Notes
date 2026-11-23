@@ -1,3 +1,4 @@
+import { api } from '../../api';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
@@ -153,7 +154,7 @@ export default function MarkdownEditor({
       error: null,
     });
     try {
-      const polished = await window.api.ai.polishText(info.text);
+      const polished = await api.ai.polishText(info.text);
       setPolishDialog((d) => (d ? { ...d, polished, loading: false } : d));
     } catch (e) {
       setPolishDialog((d) =>

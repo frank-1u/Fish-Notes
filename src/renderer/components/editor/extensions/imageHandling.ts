@@ -1,3 +1,4 @@
+import { api } from '../../../api';
 import { EditorView } from '@codemirror/view';
 import { EditorSelection } from '@codemirror/state';
 
@@ -5,7 +6,7 @@ async function fileToMarkdown(file: File): Promise<string | null> {
   if (!file.type.startsWith('image/')) return null;
   try {
     const buffer = await file.arrayBuffer();
-    const src = await window.api.images.saveFromBuffer(buffer, file.type);
+    const src = await api.images.saveFromBuffer(buffer, file.type);
     return `![](${src})`;
   } catch (err) {
     console.error('Failed to save image:', err);

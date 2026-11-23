@@ -1,3 +1,4 @@
+import { parseAppError, type ChatData } from '../../api';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAssistant, type UiMessage } from '../../contexts/AssistantContext';
@@ -281,12 +282,19 @@ export default function ChatPanel() {
     el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
   }, [input]);
 
+  const sendMessage = useCallback(
+    (text: string) => {
+      void send(text).catch((error: unknown) => message.error(parseAppError(error).message));
+    },
+    [send],
+  );
+
   const submit = useCallback(() => {
     const text = input;
     if (!text.trim() || isStreaming) return;
     setInput('');
-    send(text);
-  }, [input, isStreaming, send]);
+    sendMessage(text);
+  }, [input, isStreaming, sendMessage]);
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     // Ignore Enter while an IME composition is active — pressing Enter to confirm a
@@ -393,9 +401,6 @@ export default function ChatPanel() {
           backgroundColor: 'var(--card-bg)',
           border: '1px solid var(--border-primary)',
           boxShadow: '0 16px 48px rgba(0,0,0,0.28)',
-          // opt out of the macOS title-bar drag region so buttons stay clickable
-          // even when the panel is dragged over the top bar
-          WebkitAppRegion: 'no-drag',
         } as React.CSSProperties
       }
     >
@@ -538,7 +543,7 @@ export default function ChatPanel() {
       ) : (
         <div ref={listRef} className="flex-1 overflow-y-auto px-3 py-3">
           {messages.length === 0 ? (
-            <EmptyState bound={!!boundNote} onPick={(text) => send(text)} />
+            <EmptyState bound={!!boundNote} onPick={sendMessage} />
           ) : (
             messages.map((m) => (
               <MessageBubble

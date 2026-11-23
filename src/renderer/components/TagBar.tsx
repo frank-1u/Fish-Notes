@@ -1,6 +1,8 @@
+import { api, parseAppError, type TagData } from '../api';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '../contexts/AppContext';
+import { message } from './message';
 
 interface TagBarProps {
   noteId: string;
@@ -17,7 +19,7 @@ function TagBar({ noteId }: TagBarProps) {
 
   // Load tags for this note
   useEffect(() => {
-    window.api.tags.getByNoteId(noteId).then(setNoteTags);
+    api.tags.getByNoteId(noteId).then(setNoteTags);
   }, [noteId, state.tags]);
 
   // Close popup on outside click
@@ -44,9 +46,13 @@ function TagBar({ noteId }: TagBarProps) {
     async (tagName: string) => {
       const trimmed = tagName.trim();
       if (!trimmed) return;
-      await addNoteTag(noteId, trimmed);
-      setInputValue('');
-      setShowPopup(false);
+      try {
+        await addNoteTag(noteId, trimmed);
+        setInputValue('');
+        setShowPopup(false);
+      } catch (error) {
+        message.error(parseAppError(error).message);
+      }
     },
     [noteId, addNoteTag],
   );

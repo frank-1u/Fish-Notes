@@ -1,3 +1,4 @@
+import { api, type ChatData } from '../api';
 import {
   createContext,
   useContext,
@@ -141,7 +142,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    window.api.chats.list().then(setChats);
+    api.chats.list().then(setChats);
   }, []);
 
   // global stream listeners (route by requestId via the streams map)
@@ -184,14 +185,14 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       }, REVEAL_MS);
     };
 
-    const offChunk = window.api.ai.onChatChunk(({ requestId, delta }) => {
+    const offChunk = api.ai.onChatChunk(({ requestId, delta }) => {
       const s = streams.current.get(requestId);
       if (!s) return;
       s.acc += delta;
       startReveal(requestId);
     });
 
-    const offSources = window.api.ai.onChatSources(({ requestId, sources }) => {
+    const offSources = api.ai.onChatSources(({ requestId, sources }) => {
       const s = streams.current.get(requestId);
       if (!s) return;
       patchTab(s.tabKey, (tb) => ({
@@ -200,7 +201,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       }));
     });
 
-    const offThinking = window.api.ai.onChatThinking(({ requestId, delta, tokens }) => {
+    const offThinking = api.ai.onChatThinking(({ requestId, delta, tokens }) => {
       const s = streams.current.get(requestId);
       if (!s) return;
       patchTab(s.tabKey, (tb) => ({
@@ -226,15 +227,15 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       if (fullText && fullText.trim().length > s.acc.trim().length) s.acc = fullText;
       s.done = true;
       const content = s.acc.trim();
-      if (content) window.api.chats.addMessage(s.chatId, 'assistant', content);
+      if (content) api.chats.addMessage(s.chatId, 'assistant', content);
       // let the reveal loop drain the backlog, then it cleans up UI state
       startReveal(requestId);
     };
 
-    const offDone = window.api.ai.onChatDone(({ requestId, fullText }) =>
+    const offDone = api.ai.onChatDone(({ requestId, fullText }) =>
       finalize(requestId, fullText || undefined),
     );
-    const offError = window.api.ai.onChatError(({ requestId, message: msg }) => {
+    const offError = api.ai.onChatError(({ requestId, message: msg }) => {
       const s = streams.current.get(requestId);
       if (!s) return;
       if (s.timer != null) window.clearInterval(s.timer);
@@ -303,7 +304,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       // ensure a persisted chat exists for this tab
       let chatId = tab.chatId;
       if (!chatId) {
-        const chat = await window.api.chats.create(trimmed.slice(0, 24));
+        const chat = await api.chats.create(trimmed.slice(0, 24));
         chatId = chat.id;
         patchTab(key, (tb) => ({ ...tb, chatId: chat.id, title: chat.title }));
         setChats((prev) => [chat, ...prev]);
@@ -316,10 +317,10 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       let noteId: string | null = null;
       if (tab.boundNote) {
         const bound = tab.boundNote;
-        const note = state.notes.find((n) => n.id === bound.id);
+        const note = await api.notes.get(bound.id);
         noteId = bound.id;
         if (note?.isLocked) {
-          const dec = await window.api.notes.getDecrypted(note.id);
+          const dec = await api.notes.getDecrypted(note.id);
           noteContext = dec?.content || undefined;
         } else {
           noteContext = note?.content || undefined;
@@ -343,8 +344,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       }));
       setPrefill('');
 
-      await window.api.chats.addMessage(chatId, 'user', trimmed, noteId);
-      window.api.chats.list().then(setChats);
+      await api.chats.addMessage(chatId, 'user', trimmed, noteId);
+      api.chats.list().then(setChats);
 
       const requestId = genId();
       streams.current.set(requestId, {
@@ -354,14 +355,14 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         acc: '',
         revealed: 0,
       });
-      window.api.ai.chatStream({
+      api.ai.chatStream({
         requestId,
         messages: history,
         noteContext,
         scope: !tab.boundNote && tab.useKb ? 'notes' : undefined,
       });
     },
-    [patchTab, state.notes, t],
+    [patchTab, t],
   );
 
   const abort = useCallback(() => {
@@ -375,11 +376,11 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     }
     if (!entry) return;
     const [requestId, s] = entry;
-    window.api.ai.abortChat(requestId);
+    api.ai.abortChat(requestId);
     if (s.timer != null) window.clearInterval(s.timer);
     streams.current.delete(requestId);
     const content = s.acc.trim();
-    if (content) window.api.chats.addMessage(s.chatId, 'assistant', content);
+    if (content) api.chats.addMessage(s.chatId, 'assistant', content);
     patchTab(key, (tb) => ({
       ...tb,
       isStreaming: false,
@@ -401,12 +402,12 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     async (markdown: string) => {
       const body = markdown.trim();
       if (!body) return;
-      const note = await window.api.notes.create();
+      const note = await api.notes.create();
       const tab = tabsRef.current.find((tb) => tb.key === activeKeyRef.current);
       const title = tab?.title?.trim() || body.split('\n')[0].slice(0, 30);
       const contentText = body.replace(/[#*`>\-[\]()!]/g, '').trim();
-      await window.api.notes.update(note.id, { title, content: body, contentText });
-      await window.api.tags.setNoteTags(note.id, [AI_TAG]);
+      await api.notes.update(note.id, { title, content: body, contentText });
+      await api.tags.setNoteTags(note.id, [AI_TAG]);
       await refreshNotes();
       await refreshTags();
       message.success(t('Saved as note'));
@@ -440,7 +441,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         setActiveKey(existing.key);
         return;
       }
-      const msgs = await window.api.chats.getMessages(id);
+      const msgs = await api.chats.getMessages(id);
       const boundId = msgs.find((m) => m.noteId)?.noteId;
       let boundNote: BoundNote | null = null;
       if (boundId) {
@@ -469,7 +470,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
   const deleteChat = useCallback(
     async (id: string) => {
-      await window.api.chats.delete(id);
+      await api.chats.delete(id);
       setChats((prev) => prev.filter((c) => c.id !== id));
       // close any open tab backed by this chat
       setTabs((prev) => {

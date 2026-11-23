@@ -1,3 +1,4 @@
+import { api, type NoteSummary } from '../api';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '../contexts/AppContext';
@@ -9,7 +10,7 @@ interface SearchBarProps {
 function SearchBar({ onClose }: SearchBarProps) {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<NoteData[]>([]);
+  const [results, setResults] = useState<NoteSummary[]>([]);
   const { selectNote, setViewMode } = useApp();
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -31,7 +32,7 @@ function SearchBar({ onClose }: SearchBarProps) {
     }
 
     timerRef.current = setTimeout(async () => {
-      const res = await window.api.search.notes(value);
+      const res = await api.search.notes(value);
       setResults(res);
     }, 200);
   }, []);
@@ -115,12 +116,7 @@ function SearchBar({ onClose }: SearchBarProps) {
                   {note.title || t('Untitled')}
                 </div>
                 <div className="text-xs text-gray-400 mt-1 truncate">
-                  {note.content
-                    .replace(/<[^>]*>/g, '')
-                    .replace(/&nbsp;/g, ' ')
-                    .replace(/&amp;/g, '&')
-                    .trim()
-                    .slice(0, 100)}
+                  {note.preview}
                 </div>
               </button>
             ))}

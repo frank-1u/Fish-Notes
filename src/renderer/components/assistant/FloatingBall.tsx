@@ -218,8 +218,6 @@ export default function FloatingBall() {
               ? '0 4px 14px rgba(0,0,0,0.25)'
               : '0 6px 18px rgba(0,0,0,0.22)',
           transition: 'box-shadow 0.2s, transform 0.1s',
-          // don't let the macOS title-bar drag region swallow clicks/drag on the ball
-          WebkitAppRegion: 'no-drag',
         } as React.CSSProperties
       }
     >

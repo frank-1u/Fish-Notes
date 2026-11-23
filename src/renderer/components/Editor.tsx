@@ -1,3 +1,7 @@
+import { isTauri } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { api, parseAppError } from '../api';
+import { unavailable } from '../api/client';
 import React, { useCallback, useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import MarkdownEditor from './editor/MarkdownEditor';
@@ -13,10 +17,20 @@ interface EditorProps {
   title: string;
   content: string;
   isLocked: boolean;
+  loading: boolean;
+  loadError?: string;
   onContentChange?: (noteId: string, content: string) => void;
 }
 
-function Editor({ noteId, title, content, isLocked, onContentChange }: EditorProps) {
+function Editor({
+  noteId,
+  title,
+  content,
+  isLocked,
+  loading,
+  loadError,
+  onContentChange,
+}: EditorProps) {
   const { t, i18n } = useTranslation();
   const { save, flush } = useAutoSave(500);
   const { save: saveTitle, flush: flushTitle } = useAutoSave(500);
@@ -39,11 +53,9 @@ function Editor({ noteId, title, content, isLocked, onContentChange }: EditorPro
   const [decryptedContent, setDecryptedContent] = useState<string | null>(null);
   const [loadingDecrypted, setLoadingDecrypted] = useState(false);
 
-  const initialContentRef = useRef(content);
   const lastContentRef = useRef(content);
   const prevNoteIdRef = useRef(noteId);
   if (noteId !== prevNoteIdRef.current) {
-    initialContentRef.current = content;
     lastContentRef.current = content;
     prevNoteIdRef.current = noteId;
     setLocalTitle(title);
@@ -55,15 +67,15 @@ function Editor({ noteId, title, content, isLocked, onContentChange }: EditorPro
   useEffect(() => {
     if (!noteId || !isLocked || !sessionUnlocked) {
       setDecryptedContent(null);
+      setLoadingDecrypted(false);
       return;
     }
     let cancelled = false;
     setLoadingDecrypted(true);
-    window.api.notes.getDecrypted(noteId).then((note) => {
+    api.notes.getDecrypted(noteId).then((note) => {
       if (cancelled) return;
       if (note) {
         setDecryptedContent(note.content);
-        initialContentRef.current = note.content;
         lastContentRef.current = note.content;
       }
       setLoadingDecrypted(false);
@@ -73,25 +85,34 @@ function Editor({ noteId, title, content, isLocked, onContentChange }: EditorPro
     };
   }, [noteId, isLocked, sessionUnlocked]);
 
-  // Sync title from external changes (e.g. note list selection)
-  useEffect(() => {
-    setLocalTitle(title);
-  }, [title]);
+  const flushPending = useCallback(() => {
+    flush();
+    flushTitle();
+  }, [flush, flushTitle]);
 
-  // Flush any pending debounced save when switching notes, unmounting, or closing the
-  // window — otherwise edits made within the last 500ms are silently lost.
+  useEffect(() => flushPending, [noteId, flushPending]);
+
   useEffect(() => {
-    const onBeforeUnload = () => {
-      flush();
-      flushTitle();
-    };
-    window.addEventListener('beforeunload', onBeforeUnload);
+    if (!isTauri()) return;
+    let closing = false;
+    const listener = getCurrentWindow().onCloseRequested(async (event) => {
+      if (closing) {
+        event.preventDefault();
+        return;
+      }
+      closing = true;
+      flushPending();
+      await api.notes.waitForWrites();
+    });
+    const reportError = (error: unknown) => message.error(parseAppError(error).message);
+    void listener.catch(reportError);
     return () => {
-      window.removeEventListener('beforeunload', onBeforeUnload);
-      flush();
-      flushTitle();
+      void listener.then(
+        (unlisten) => unlisten(),
+        () => undefined,
+      );
     };
-  }, [noteId, flush, flushTitle]);
+  }, [flushPending]);
 
   const handleTitleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -132,10 +153,14 @@ function Editor({ noteId, title, content, isLocked, onContentChange }: EditorPro
   const handleExport = useCallback(
     async (format: 'markdown' | 'html' | 'pdf') => {
       setShowExportMenu(false);
-      const exportContent = isLocked && decryptedContent ? decryptedContent : content;
-      await window.api.export[format](title, exportContent);
+      try {
+        if (format === 'pdf') throw unavailable('PDF export');
+        await api.export[format](localTitle, lastContentRef.current);
+      } catch (error) {
+        message.error(parseAppError(error).message);
+      }
     },
-    [title, content, isLocked, decryptedContent],
+    [localTitle],
   );
 
   const handleVerify = useCallback(
@@ -156,7 +181,7 @@ function Editor({ noteId, title, content, isLocked, onContentChange }: EditorPro
 
   const handleSuggestTitle = useCallback(async () => {
     if (!noteId || suggestingTitle) return;
-    const source = isLocked ? (decryptedContent ?? '') : lastContentRef.current || content;
+    const source = isLocked && !decryptedContent ? '' : lastContentRef.current;
     if (!source.trim()) {
       message.warning(t('Note is empty'));
       return;
@@ -164,21 +189,22 @@ function Editor({ noteId, title, content, isLocked, onContentChange }: EditorPro
     setSuggestingTitle(true);
     setTitleCandidate(null);
     try {
-      const suggested = await window.api.ai.suggestTitle(source);
+      const suggested = await api.ai.suggestTitle(source);
       if (suggested) setTitleCandidate(suggested);
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
     } finally {
       setSuggestingTitle(false);
     }
-  }, [noteId, suggestingTitle, isLocked, decryptedContent, content, t]);
+  }, [noteId, suggestingTitle, isLocked, decryptedContent, t]);
 
   const handleAcceptTitle = useCallback(() => {
     if (!noteId || !titleCandidate) return;
+    flushTitle();
     setLocalTitle(titleCandidate);
     updateNoteTitle(noteId, titleCandidate);
     setTitleCandidate(null);
-  }, [noteId, titleCandidate, updateNoteTitle]);
+  }, [noteId, titleCandidate, flushTitle, updateNoteTitle]);
 
   const handleDismissTitle = useCallback(() => {
     setTitleCandidate(null);
@@ -187,7 +213,7 @@ function Editor({ noteId, title, content, isLocked, onContentChange }: EditorPro
   // Determine if we should show the password prompt
   const needsPassword = isLocked && !sessionUnlocked;
   // Determine the effective content for the editor
-  const editorContent = isLocked ? (decryptedContent ?? '') : initialContentRef.current;
+  const editorContent = isLocked && !decryptedContent ? '' : lastContentRef.current;
 
   return (
     <div
@@ -197,18 +223,11 @@ function Editor({ noteId, title, content, isLocked, onContentChange }: EditorPro
       {/* Editor header with export button */}
       <div
         className="h-12 flex items-center justify-end px-4 gap-1 shrink-0 no-select"
-        style={
-          {
-            borderBottom: '1px solid var(--border-secondary)',
-            WebkitAppRegion: 'drag',
-          } as React.CSSProperties
-        }
+        data-tauri-drag-region={navigator.userAgent.includes('Macintosh') ? true : undefined}
+        style={{ borderBottom: '1px solid var(--border-secondary)' }}
       >
         {noteId && (
-          <div
-            className="flex items-center gap-1"
-            style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-          >
+          <div className="flex items-center gap-1">
             {/* Lock/unlock button */}
             {encryptionReady && sessionUnlocked && (
               <button
@@ -402,6 +421,7 @@ function Editor({ noteId, title, content, isLocked, onContentChange }: EditorPro
               key={`${noteId}-${resolvedTheme}-${i18n.language}`}
               defaultValue={editorContent}
               onChange={handleChange}
+              onSave={flushPending}
             />
           </>
         )
@@ -410,7 +430,8 @@ function Editor({ noteId, title, content, isLocked, onContentChange }: EditorPro
           className="flex-1 flex items-center justify-center"
           style={{ color: 'var(--text-tertiary)' }}
         >
-          {t('Select or create a note to start writing')}
+          {loadError ??
+            (loading ? t('Loading note...') : t('Select or create a note to start writing'))}
         </div>
       )}
     </div>

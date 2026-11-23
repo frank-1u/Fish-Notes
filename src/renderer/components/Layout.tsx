@@ -1,4 +1,5 @@
 import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
+import { api, AppError, parseAppError, type NoteData } from '../api';
 import Sidebar from './Sidebar';
 import NoteList from './NoteList';
 import Editor from './Editor';
@@ -26,6 +27,36 @@ function Layout() {
     () => notes.find((n) => n.id === selectedNoteId) ?? null,
     [notes, selectedNoteId],
   );
+  const isLocked = selectedNote?.isLocked ?? false;
+  const [loadedNote, setLoadedNote] = useState<{
+    id: string;
+    isLocked: boolean;
+    data?: NoteData;
+    error?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    setLoadedNote(null);
+    if (!selectedNoteId) return;
+
+    let active = true;
+    void api.notes
+      .get(selectedNoteId)
+      .then((data) => {
+        if (!data) throw new AppError('note_not_found', 'Note not found.');
+        if (active) setLoadedNote({ id: selectedNoteId, isLocked, data });
+      })
+      .catch((error: unknown) => {
+        if (active)
+          setLoadedNote({ id: selectedNoteId, isLocked, error: parseAppError(error).message });
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedNoteId, isLocked]);
+
+  const current =
+    loadedNote?.id === selectedNoteId && loadedNote.isLocked === isLocked ? loadedNote : null;
 
   const openSearch = useCallback(() => setShowSearch(true), []);
   const closeSearch = useCallback(() => setShowSearch(false), []);
@@ -121,10 +152,12 @@ function Layout() {
       />
       <NoteList width={noteListWidth} onResizeStart={handleNoteListMouseDown} />
       <Editor
-        noteId={selectedNote?.id ?? null}
-        title={selectedNote?.title ?? ''}
-        content={selectedNote?.content ?? ''}
-        isLocked={selectedNote?.isLocked ?? false}
+        noteId={current?.data?.id ?? null}
+        title={current?.data?.title ?? ''}
+        content={current?.data?.content ?? ''}
+        isLocked={isLocked}
+        loading={selectedNoteId !== null && current === null}
+        loadError={current?.error}
         onContentChange={updateNoteContent}
       />
       {showSearch && <SearchBar onClose={closeSearch} />}

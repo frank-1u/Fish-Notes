@@ -1,3 +1,4 @@
+import { type TagData } from '../api';
 /**
  * Parse #tags from HTML content.
  * Supports nested tags like #parent/child.

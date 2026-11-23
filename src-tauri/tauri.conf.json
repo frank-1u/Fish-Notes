@@ -1,0 +1,38 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Fish Notes",
+  "version": "1.0.0",
+  "identifier": "com.fishnotes.desktop",
+  "build": {
+    "beforeDevCommand": "yarn dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "yarn build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Fish Notes",
+        "create": false,
+        "width": 1200,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 500,
+        "dragDropEnabled": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: http:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "icon": [
+      "../src/assets/icon.iconset/icon_16x16@2x.png",
+      "../src/assets/icon.iconset/icon_128x128@2x.png",
+      "icons/icon.ico",
+      "../src/assets/icon.icns"
+    ]
+  }
+}

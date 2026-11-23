@@ -1,3 +1,4 @@
+import { api } from '../api';
 import { useState, useCallback, useEffect, useRef, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
@@ -61,7 +62,7 @@ function Settings({ onClose }: SettingsProps) {
   const [aiTesting, setAiTesting] = useState(false);
 
   useEffect(() => {
-    window.api.ai.getConfig().then((cfg) => {
+    api.ai.getConfig().then((cfg) => {
       setAiHasToken(cfg.hasToken);
       setAiModel(cfg.model || 'claude-sonnet-4-6');
       setAiClaudePath(cfg.claudePath || '');
@@ -69,7 +70,7 @@ function Settings({ onClose }: SettingsProps) {
   }, []);
 
   const persistAI = useCallback(async () => {
-    await window.api.ai.setConfig({
+    await api.ai.setConfig({
       token: aiToken.trim(),
       model: aiModel.trim() || 'claude-sonnet-4-6',
       claudePath: aiClaudePath.trim() || undefined,
@@ -88,7 +89,7 @@ function Settings({ onClose }: SettingsProps) {
   const handleTestAI = useCallback(async () => {
     setAiTesting(true);
     try {
-      const r = await window.api.ai.testConnection({
+      const r = await api.ai.testConnection({
         token: aiToken.trim(),
         model: aiModel.trim() || 'claude-sonnet-4-6',
         claudePath: aiClaudePath.trim() || undefined,
@@ -225,7 +226,7 @@ function Settings({ onClose }: SettingsProps) {
       return;
     }
     setLoading(true);
-    await window.api.encryption.setPassword(password);
+    await api.encryption.setPassword(password);
     await refreshEncryptionState();
     resetForm();
     setLoading(false);
@@ -246,7 +247,7 @@ function Settings({ onClose }: SettingsProps) {
       return;
     }
     setLoading(true);
-    const ok = await window.api.encryption.changePassword(oldPassword, password);
+    const ok = await api.encryption.changePassword(oldPassword, password);
     if (!ok) {
       message.error(t('Current password is incorrect'));
       setLoading(false);
@@ -264,7 +265,7 @@ function Settings({ onClose }: SettingsProps) {
       return;
     }
     setLoading(true);
-    const ok = await window.api.encryption.removePassword(password);
+    const ok = await api.encryption.removePassword(password);
     if (!ok) {
       message.error(t('Incorrect password'));
       setLoading(false);

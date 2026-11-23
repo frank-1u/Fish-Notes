@@ -1,9 +1,9 @@
+import { type NoteSummary } from '../api';
 import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '../contexts/AppContext';
 import { useAssistant } from '../contexts/AssistantContext';
 import PasswordPrompt from './PasswordPrompt';
-import { buildNotePreview } from '../utils/mdUtils';
 import { PinIcon, RobotIcon } from './icons';
 import { message } from './message';
 
@@ -408,7 +408,7 @@ const NoteListItem = memo(function NoteListItem({
   onSelect,
   onContextMenu,
 }: {
-  note: NoteData;
+  note: NoteSummary;
   isSelected: boolean;
   itemRef?: React.Ref<HTMLButtonElement>;
   onSelect: (id: string) => void;
@@ -416,10 +416,7 @@ const NoteListItem = memo(function NoteListItem({
 }) {
   const { t } = useTranslation();
   const title = note.title || t('Untitled');
-  // Prefer the DB-stored plain text; only fall back to stripping markdown for
-  // legacy rows that predate content_text. Avoids re-running regex over full
-  // content on every render.
-  const preview = note.contentText ? note.contentText.slice(0, 80) : buildNotePreview(note.content);
+  const preview = note.preview;
   const date = formatRelativeDate(note.updatedAt, t);
 
   return (

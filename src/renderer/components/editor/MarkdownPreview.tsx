@@ -1,6 +1,9 @@
 import { useMemo, useCallback, forwardRef, type MouseEvent } from 'react';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
+import { parseAppError } from '../../api';
+import { message } from '../message';
 
 // Allow http(s)/mailto/tel links and our own fish-image: scheme; strip everything else
 // (javascript:, inline event handlers, <script>, etc.) from rendered note content.
@@ -75,10 +78,6 @@ function renderMarkdown(md: string): string {
     html = html.replace(`%%HASHTAG_${i}%%`, `<span class="hashtag">${tagPlaceholders[i]}</span>`);
   }
 
-  // marked doesn't emit target/rel on links; add them so Electron's
-  // setWindowOpenHandler can route external links to the default browser.
-  html = html.replace(/<a (?![^>]*\btarget=)/g, '<a target="_blank" rel="noopener noreferrer" ');
-
   // Tag blank-line paragraphs (the &nbsp; rows we injected) so CSS can collapse
   // their margins and match source's per-line spacing.
   html = html.replace(/<p>\s*&nbsp;\s*<\/p>/g, '<p class="md-blank">&nbsp;</p>');
@@ -91,12 +90,13 @@ const MarkdownPreview = forwardRef<HTMLDivElement, MarkdownPreviewProps>(
     const html = useMemo(() => renderMarkdown(value), [value]);
 
     const handleClick = useCallback((e: MouseEvent<HTMLDivElement>) => {
-      const anchor = (e.target as HTMLElement).closest('a');
+      if (!(e.target instanceof Element)) return;
+      const anchor = e.target.closest('a');
       if (!anchor) return;
-      const href = anchor.getAttribute('href');
+      const href = anchor.getAttribute('href')?.trim();
       if (!href || !EXTERNAL_LINK_RE.test(href)) return;
       e.preventDefault();
-      window.open(href, '_blank');
+      void openUrl(href).catch((error: unknown) => message.error(parseAppError(error).message));
     }, []);
 
     return (
