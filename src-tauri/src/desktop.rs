@@ -29,6 +29,8 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let data_dir = match env::var_os("FISH_NOTES_USER_DATA") {
                 Some(path) if !path.is_empty() => PathBuf::from(path),
