@@ -1,5 +1,6 @@
 import { api } from '../../api';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { Text } from '@codemirror/state';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -8,19 +9,21 @@ import MarkdownPreview from './MarkdownPreview';
 import EditorToolbar from './EditorToolbar';
 import PolishDialog from './PolishDialog';
 import type { AppTheme } from './extensions/themes';
-import { useAssistant } from '../../contexts/AssistantContext';
+import { useAssistantEntryPoints } from '../../contexts/AssistantContext';
 import { RobotIcon } from '../icons';
 import { message } from '../message';
 
 export type EditorMode = 'source' | 'preview' | 'split';
 
 interface MarkdownEditorProps {
+  noteId: string | null;
   defaultValue: string;
-  onChange?: (markdown: string) => void;
+  onChange: (doc: Text) => void;
   onSave?: () => void;
   showToolbar?: boolean;
 }
 
+const PREVIEW_DELAY_MS = 275;
 const MODE_STORAGE_KEY = 'fish-notes:editor-mode';
 const TOOLBAR_STORAGE_KEY = 'fish-notes:editor-toolbar';
 
@@ -62,22 +65,20 @@ function TabButton({ label, shortcut, active, onClick }: TabButtonProps) {
 }
 
 export default function MarkdownEditor({
+  noteId,
   defaultValue,
   onChange,
   onSave,
   showToolbar: showToolbarProp,
 }: MarkdownEditorProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { resolvedTheme } = useTheme();
-  const { askWithSelection } = useAssistant();
+  const { askWithSelection } = useAssistantEntryPoints();
   const [mode, setMode] = useState<EditorMode>(readMode);
-  const [content, setContent] = useState(defaultValue);
-  // Debounced copy of `content` fed to the preview so we don't re-parse the whole
-  // document with marked on every keystroke (only matters in preview/split mode).
-  const [previewContent, setPreviewContent] = useState(defaultValue);
+  const [previewContent, setPreviewContent] = useState(mode === 'source' ? '' : defaultValue);
+  const previewTimer = useRef<number>();
   const [toolbarVisible] = useState(readToolbar);
   const editorRef = useRef<CodeMirrorHandle>(null);
-  const sourceScrollRef = useRef<HTMLDivElement>(null);
   const previewScrollRef = useRef<HTMLDivElement>(null);
   const isScrollingSyncRef = useRef(false);
 
@@ -236,21 +237,36 @@ export default function MarkdownEditor({
     return () => window.removeEventListener('keydown', handler);
   }, [updateMode]);
 
-  const handleChange = useCallback(
-    (value: string) => {
-      setContent(value);
-      onChange?.(value);
-    },
-    [onChange],
-  );
+  const cancelPreview = useCallback(() => {
+    window.clearTimeout(previewTimer.current);
+  }, []);
 
-  // Sync preview content: debounce while editing; when the preview isn't shown
-  // (source mode) it's unmounted anyway, so skip the work entirely.
-  useEffect(() => {
-    if (mode === 'source') return;
-    const id = setTimeout(() => setPreviewContent(content), 120);
-    return () => clearTimeout(id);
-  }, [content, mode]);
+  useLayoutEffect(() => {
+    setPolishSel(null);
+    setBubblePos(null);
+    setPolishDialog(null);
+    if (previewScrollRef.current) previewScrollRef.current.scrollTop = 0;
+  }, [noteId, defaultValue]);
+
+  useLayoutEffect(() => {
+    setPreviewContent(
+      mode === 'source' ? '' : (editorRef.current?.view?.state.doc.toString() ?? defaultValue),
+    );
+    return cancelPreview;
+  }, [noteId, defaultValue, mode, cancelPreview]);
+
+  const handleChange = useCallback(
+    (doc: Text) => {
+      onChange(doc);
+      if (mode === 'source') return;
+      cancelPreview();
+      previewTimer.current = window.setTimeout(
+        () => setPreviewContent(doc.toString()),
+        PREVIEW_DELAY_MS,
+      );
+    },
+    [onChange, mode, cancelPreview],
+  );
 
   const getView = useCallback(() => editorRef.current?.view ?? null, []);
 
@@ -333,7 +349,6 @@ export default function MarkdownEditor({
 
       <div className="flex-1 flex min-h-0 overflow-hidden">
         <div
-          ref={sourceScrollRef}
           className="flex-1 min-w-0 overflow-hidden"
           style={{
             display: mode === 'preview' ? 'none' : 'flex',
@@ -343,11 +358,13 @@ export default function MarkdownEditor({
         >
           <CodeMirrorView
             ref={editorRef}
+            noteId={noteId}
             defaultValue={defaultValue}
             onChange={handleChange}
             onSave={onSave}
             onPolishSelection={setPolishSel}
             theme={themeKey}
+            language={i18n.resolvedLanguage ?? i18n.language}
             className="h-full"
           />
         </div>
@@ -360,7 +377,7 @@ export default function MarkdownEditor({
             color: 'var(--text-primary)',
           }}
         >
-          {mode !== 'source' && <MarkdownPreview value={previewContent} />}
+          {noteId && mode !== 'source' && <MarkdownPreview value={previewContent} />}
         </div>
       </div>
 

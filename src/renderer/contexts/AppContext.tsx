@@ -4,6 +4,7 @@ import {
   useContext,
   useReducer,
   useEffect,
+  useLayoutEffect,
   useCallback,
   useMemo,
   useRef,
@@ -60,7 +61,18 @@ function appReducer(state: AppState, action: AppAction): AppState {
         selectedNoteId: action.note.id,
       };
     case 'UPDATE_NOTE': {
-      const notes = state.notes.map((n) => (n.id === action.id ? { ...n, ...action.data } : n));
+      const index = state.notes.findIndex((note) => note.id === action.id);
+      if (index === -1) return state;
+      const note = state.notes[index];
+      if (
+        Object.entries(action.data).every(
+          ([key, value]) => note[key as keyof NoteSummary] === value,
+        )
+      ) {
+        return state;
+      }
+      const notes = state.notes.slice();
+      notes[index] = { ...note, ...action.data };
       if (action.data.isPinned !== undefined) notes.sort(compareNotes);
       return { ...state, notes };
     }
@@ -89,8 +101,8 @@ function appReducer(state: AppState, action: AppAction): AppState {
   }
 }
 
-interface AppContextValue {
-  state: AppState;
+interface AppActions {
+  getNoteSummary: (id: string) => NoteSummary | undefined;
   createNote: () => Promise<void>;
   importNotes: () => Promise<ImportResult>;
   selectNote: (id: string | null) => void;
@@ -109,8 +121,6 @@ interface AppContextValue {
   togglePinTag: (tagId: string) => Promise<void>;
   reorderTags: (orderedIds: string[]) => Promise<void>;
   togglePinNote: (id: string) => Promise<void>;
-  encryptionReady: boolean;
-  sessionUnlocked: boolean;
   lockNote: (id: string) => Promise<void>;
   unlockNote: (id: string) => Promise<void>;
   verifyPassword: (password: string) => Promise<boolean>;
@@ -119,7 +129,16 @@ interface AppContextValue {
   registerNoteEditFlush: (flush: () => void) => () => void;
 }
 
-const AppContext = createContext<AppContextValue | null>(null);
+const AppActionsContext = createContext<AppActions | null>(null);
+const NotesContext = createContext<NoteSummary[]>([]);
+const TagsContext = createContext<TagData[]>([]);
+const ViewContext = createContext({
+  viewMode: 'all' as ViewMode,
+  selectedTagId: null as string | null,
+});
+const SelectionContext = createContext({ selectedNoteId: null as string | null, selectSeq: 0 });
+const SelectedNoteLockedContext = createContext(false);
+const EncryptionContext = createContext({ encryptionReady: false, sessionUnlocked: false });
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, {
@@ -134,6 +153,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [encryptionReady, setEncryptionReady] = useState(false);
   const [sessionUnlocked, setSessionUnlocked] = useState(false);
   const noteEditFlush = useRef<(() => void) | null>(null);
+  const notesRef = useRef(state.notes);
+  const tagsRef = useRef(state.tags);
+  const selectedNoteIdRef = useRef(state.selectedNoteId);
+  useLayoutEffect(() => {
+    notesRef.current = state.notes;
+    tagsRef.current = state.tags;
+    selectedNoteIdRef.current = state.selectedNoteId;
+  }, [state.notes, state.tags, state.selectedNoteId]);
+
+  const getNoteSummary = useCallback(
+    (id: string) => notesRef.current.find((note) => note.id === id),
+    [],
+  );
   const notesRequest = useRef(0);
   const tagsRequest = useRef(0);
   const view = useRef<{ mode: ViewMode; tagId: string | null }>({ mode: 'all', tagId: null });
@@ -143,6 +175,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ++notesRequest.current;
       view.current = { mode, tagId };
     }
+    noteEditFlush.current?.();
     dispatch({ type: 'SET_VIEW_MODE', mode, tagId });
   }, []);
 
@@ -194,7 +227,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       // Auto-tag when creating a note under a tag view
       if (origin.mode === 'tag' && origin.tagId) {
-        const tag = state.tags.find((t) => t.id === origin.tagId);
+        const tag = tagsRef.current.find((t) => t.id === origin.tagId);
         if (tag) {
           await api.tags.setNoteTags(note.id, [tag.name]);
           await refreshTags();
@@ -202,20 +235,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       if (view.current === origin) {
         if (origin.mode === 'trash') setViewMode('all');
+        noteEditFlush.current?.();
         dispatch({ type: 'ADD_NOTE', note });
       }
       await refreshNotes();
     } catch (error) {
       reportError(error);
     }
-  }, [state.tags, refreshNotes, refreshTags, setViewMode]);
+  }, [refreshNotes, refreshTags, setViewMode]);
 
   const importNotes = useCallback(async () => {
+    const origin = view.current;
     const result = await api.import.files();
     if (result.created.length) {
       // Tag imported notes with the current tag when importing inside a tag view.
-      if (state.viewMode === 'tag' && state.selectedTagId) {
-        const tag = state.tags.find((tg) => tg.id === state.selectedTagId);
+      if (origin.mode === 'tag' && origin.tagId) {
+        const tag = tagsRef.current.find((tg) => tg.id === origin.tagId);
         if (tag) {
           for (const note of result.created) {
             await api.tags.setNoteTags(note.id, [tag.name]);
@@ -224,12 +259,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       }
       await refreshNotes();
+      noteEditFlush.current?.();
       dispatch({ type: 'SELECT_NOTE', id: result.created[0].id });
     }
     return result;
-  }, [state.viewMode, state.selectedTagId, state.tags, refreshTags, refreshNotes]);
+  }, [refreshTags, refreshNotes]);
 
   const selectNote = useCallback((id: string | null) => {
+    if (id !== selectedNoteIdRef.current) noteEditFlush.current?.();
     dispatch({ type: 'SELECT_NOTE', id });
   }, []);
 
@@ -273,6 +310,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const trashNote = useCallback(
     async (id: string) => {
       try {
+        if (id === selectedNoteIdRef.current) noteEditFlush.current?.();
         await api.notes.trash(id);
         if (view.current.mode !== 'trash') dispatch({ type: 'REMOVE_NOTE', id });
         await Promise.all([refreshNotes(), refreshTags()]);
@@ -286,6 +324,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const restoreNote = useCallback(
     async (id: string) => {
       try {
+        if (id === selectedNoteIdRef.current) noteEditFlush.current?.();
         await api.notes.restore(id);
         if (view.current.mode === 'trash') dispatch({ type: 'REMOVE_NOTE', id });
         await Promise.all([refreshNotes(), refreshTags()]);
@@ -299,6 +338,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const deleteNotePermanently = useCallback(
     async (id: string) => {
       try {
+        if (id === selectedNoteIdRef.current) noteEditFlush.current?.();
         await api.notes.deletePermanently(id);
         dispatch({ type: 'REMOVE_NOTE', id });
         await Promise.all([refreshNotes(), refreshTags()]);
@@ -355,7 +395,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const registerNoteEditFlush = useCallback((flush: () => void) => {
     noteEditFlush.current = flush;
     return () => {
-      noteEditFlush.current = null;
+      if (noteEditFlush.current === flush) noteEditFlush.current = null;
     };
   }, []);
 
@@ -398,9 +438,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const value = useMemo<AppContextValue>(
+  const actions = useMemo<AppActions>(
     () => ({
-      state,
+      getNoteSummary,
       createNote,
       importNotes,
       selectNote,
@@ -419,8 +459,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       togglePinTag,
       reorderTags,
       togglePinNote,
-      encryptionReady,
-      sessionUnlocked,
       lockNote,
       unlockNote,
       verifyPassword,
@@ -429,7 +467,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       registerNoteEditFlush,
     }),
     [
-      state,
+      getNoteSummary,
       createNote,
       importNotes,
       selectNote,
@@ -448,8 +486,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       togglePinTag,
       reorderTags,
       togglePinNote,
-      encryptionReady,
-      sessionUnlocked,
       lockNote,
       unlockNote,
       verifyPassword,
@@ -459,11 +495,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+  const { notes, tags, selectedNoteId, selectSeq, viewMode, selectedTagId } = state;
+  const viewState = useMemo(() => ({ viewMode, selectedTagId }), [viewMode, selectedTagId]);
+  const selection = useMemo(() => ({ selectedNoteId, selectSeq }), [selectedNoteId, selectSeq]);
+  const encryption = useMemo(
+    () => ({ encryptionReady, sessionUnlocked }),
+    [encryptionReady, sessionUnlocked],
+  );
+  const selectedNoteLocked = notes.find((note) => note.id === selectedNoteId)?.isLocked ?? false;
+
+  return (
+    <AppActionsContext.Provider value={actions}>
+      <ViewContext.Provider value={viewState}>
+        <SelectionContext.Provider value={selection}>
+          <SelectedNoteLockedContext.Provider value={selectedNoteLocked}>
+            <EncryptionContext.Provider value={encryption}>
+              <TagsContext.Provider value={tags}>
+                <NotesContext.Provider value={notes}>{children}</NotesContext.Provider>
+              </TagsContext.Provider>
+            </EncryptionContext.Provider>
+          </SelectedNoteLockedContext.Provider>
+        </SelectionContext.Provider>
+      </ViewContext.Provider>
+    </AppActionsContext.Provider>
+  );
 }
 
-export function useApp() {
-  const context = useContext(AppContext);
-  if (!context) throw new Error('useApp must be used within AppProvider');
+export function useAppActions() {
+  const context = useContext(AppActionsContext);
+  if (!context) throw new Error('useAppActions must be used within AppProvider');
   return context;
 }
+
+export const useNotes = () => useContext(NotesContext);
+export const useTags = () => useContext(TagsContext);
+export const useNoteView = () => useContext(ViewContext);
+export const useNoteSelection = () => useContext(SelectionContext);
+export const useSelectedNoteLocked = () => useContext(SelectedNoteLockedContext);
+export const useEncryption = () => useContext(EncryptionContext);

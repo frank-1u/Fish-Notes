@@ -1,8 +1,8 @@
 import { parseAppError, type ChatData } from '../../api';
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { memo, useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAssistant, type UiMessage } from '../../contexts/AssistantContext';
-import { useApp } from '../../contexts/AppContext';
+import { useAppActions, useNoteView } from '../../contexts/AppContext';
 import { message } from '../message';
 import MarkdownPreview from '../editor/MarkdownPreview';
 import {
@@ -20,6 +20,8 @@ import {
 const GEO_KEY = 'fish-notes:assistant-panel';
 const MIN_W = 300;
 const MIN_H = 360;
+const EMPTY_MESSAGES: UiMessage[] = [];
+const FOLLOW_THRESHOLD = 48;
 
 interface Geo {
   x: number;
@@ -58,7 +60,12 @@ function ThinkingBlock({ msg }: { msg: UiMessage }) {
 
   // keep the live view pinned to the latest thought
   useEffect(() => {
-    if (live && bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
+    if (!live) return;
+    const frame = requestAnimationFrame(() => {
+      const body = bodyRef.current;
+      if (body) body.scrollTop = body.scrollHeight;
+    });
+    return () => cancelAnimationFrame(frame);
   }, [live, msg.thinking]);
 
   if (!msg.thinking?.trim()) return null;
@@ -105,7 +112,7 @@ function ThinkingBlock({ msg }: { msg: UiMessage }) {
   );
 }
 
-function MessageBubble({
+const MessageBubble = memo(function MessageBubble({
   msg,
   onSaveNote,
   onOpenNote,
@@ -195,7 +202,7 @@ function MessageBubble({
       )}
     </div>
   );
-}
+});
 
 export default function ChatPanel() {
   const { t } = useTranslation();
@@ -219,17 +226,19 @@ export default function ChatPanel() {
     prefill,
     clearPrefill,
   } = useAssistant();
-  const { state: appState, selectNote, setViewMode } = useApp();
+  const { selectNote, setViewMode } = useAppActions();
+  const { viewMode } = useNoteView();
 
   const openNote = useCallback(
     (noteId: string) => {
-      if (appState.viewMode !== 'all') setViewMode('all');
+      if (viewMode !== 'all') setViewMode('all');
       selectNote(noteId);
     },
-    [appState.viewMode, setViewMode, selectNote],
+    [viewMode, setViewMode, selectNote],
   );
 
-  const messages = activeTab?.messages ?? [];
+  const messages = activeTab?.messages ?? EMPTY_MESSAGES;
+  const streamingMessage = activeTab?.streamingMessage;
   const boundNote = activeTab?.boundNote ?? null;
   const isStreaming = activeTab?.isStreaming ?? false;
 
@@ -237,8 +246,23 @@ export default function ChatPanel() {
   const [showHistory, setShowHistory] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const followLatest = useRef(true);
 
   const isFree = !boundNote;
+  const saveMessage = useCallback(
+    (text: string) => {
+      void saveAsNote(text).catch((error: unknown) => message.error(parseAppError(error).message));
+    },
+    [saveAsNote],
+  );
+  const onSaveMessage = isFree ? saveMessage : undefined;
+  const historyBubbles = useMemo(
+    () =>
+      messages.map((msg) => (
+        <MessageBubble key={msg.id} msg={msg} onSaveNote={onSaveMessage} onOpenNote={openNote} />
+      )),
+    [messages, onSaveMessage, openNote],
+  );
 
   // reset composer text when switching tabs
   useEffect(() => {
@@ -254,10 +278,23 @@ export default function ChatPanel() {
     }
   }, [prefill, clearPrefill]);
 
-  // autoscroll on new content
   useEffect(() => {
-    if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
-  }, [messages]);
+    followLatest.current = true;
+  }, [activeKey, isOpen, showHistory]);
+
+  useEffect(() => {
+    if (!followLatest.current || !isOpen || showHistory) return;
+    const frame = requestAnimationFrame(() => {
+      const list = listRef.current;
+      if (list && followLatest.current) list.scrollTop = list.scrollHeight;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [activeKey, isOpen, showHistory, messages, streamingMessage]);
+
+  const trackScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    const { scrollHeight, scrollTop, clientHeight } = event.currentTarget;
+    followLatest.current = scrollHeight - scrollTop - clientHeight < FOLLOW_THRESHOLD;
+  }, []);
 
   // auto-grow the composer height to fit its content (capped, then scrolls)
   useEffect(() => {
@@ -269,6 +306,7 @@ export default function ChatPanel() {
 
   const sendMessage = useCallback(
     (text: string) => {
+      followLatest.current = true;
       void send(text).catch((error: unknown) => message.error(parseAppError(error).message));
     },
     [send],
@@ -423,7 +461,11 @@ export default function ChatPanel() {
         {isFree && messages.length > 0 && (
           <HeaderBtn
             title={t('Save conversation as note')}
-            onClick={() => saveAsNote(formatTranscript(messages))}
+            onClick={() =>
+              saveMessage(
+                formatTranscript(streamingMessage ? [...messages, streamingMessage] : messages),
+              )
+            }
           >
             <NotesIcon size={14} />
           </HeaderBtn>
@@ -533,18 +575,20 @@ export default function ChatPanel() {
       ) : !activeTab ? (
         <NoTabState onNew={newTab} />
       ) : (
-        <div ref={listRef} className="flex-1 overflow-y-auto px-3 py-3">
+        <div ref={listRef} onScroll={trackScroll} className="flex-1 overflow-y-auto px-3 py-3">
           {messages.length === 0 ? (
             <EmptyState bound={!!boundNote} onPick={sendMessage} />
-          ) : (
-            messages.map((m) => (
+          ) : streamingMessage ? (
+            historyBubbles.concat(
               <MessageBubble
-                key={m.id}
-                msg={m}
-                onSaveNote={isFree ? (text) => saveAsNote(text) : undefined}
+                key={streamingMessage.id}
+                msg={streamingMessage}
+                onSaveNote={onSaveMessage}
                 onOpenNote={openNote}
-              />
-            ))
+              />,
+            )
+          ) : (
+            historyBubbles
           )}
         </div>
       )}

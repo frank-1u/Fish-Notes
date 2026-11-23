@@ -1,5 +1,5 @@
-import { useEffect, useImperativeHandle, useRef, forwardRef } from 'react';
-import { EditorState, type Extension } from '@codemirror/state';
+import { useLayoutEffect, useImperativeHandle, useRef, useMemo, forwardRef } from 'react';
+import { Compartment, EditorState, type Extension, type Text } from '@codemirror/state';
 import {
   EditorView,
   keymap,
@@ -39,24 +39,39 @@ export interface CodeMirrorHandle {
 export type { PolishSelectionInfo };
 
 interface CodeMirrorViewProps {
+  noteId: string | null;
   defaultValue: string;
-  onChange: (value: string) => void;
+  onChange: (doc: Text) => void;
   onSave?: () => void;
   onPolishSelection?: (sel: PolishSelectionInfo | null) => void;
   theme: AppTheme;
+  language: string;
   className?: string;
 }
 
 const CodeMirrorView = forwardRef<CodeMirrorHandle, CodeMirrorViewProps>(
-  ({ defaultValue, onChange, onSave, onPolishSelection, theme, className }, ref) => {
+  (
+    { noteId, defaultValue, onChange, onSave, onPolishSelection, theme, language, className },
+    ref,
+  ) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const viewRef = useRef<EditorView | null>(null);
     const onChangeRef = useRef(onChange);
     const onSaveRef = useRef(onSave);
     const onPolishSelectionRef = useRef(onPolishSelection);
-    onChangeRef.current = onChange;
-    onSaveRef.current = onSave;
-    onPolishSelectionRef.current = onPolishSelection;
+    useLayoutEffect(() => {
+      onChangeRef.current = onChange;
+      onSaveRef.current = onSave;
+      onPolishSelectionRef.current = onPolishSelection;
+    }, [onChange, onSave, onPolishSelection]);
+    const themeCompartment = useMemo(() => new Compartment(), []);
+    const languageCompartment = useMemo(() => new Compartment(), []);
+    const themeExtension = useMemo(() => createEditorTheme(theme), [theme]);
+    const languageExtension = useMemo(
+      () => EditorView.contentAttributes.of({ lang: language }),
+      [language],
+    );
+    const loadedDocument = useRef<{ noteId: string | null; defaultValue: string }>();
 
     useImperativeHandle(
       ref,
@@ -69,10 +84,8 @@ const CodeMirrorView = forwardRef<CodeMirrorHandle, CodeMirrorViewProps>(
       [],
     );
 
-    useEffect(() => {
-      if (!containerRef.current) return;
-
-      const extensions: Extension[] = [
+    const extensions = useMemo<Extension[]>(
+      () => [
         lineNumbers({ formatNumber: () => '' }),
         history(),
         drawSelection(),
@@ -119,28 +132,66 @@ const CodeMirrorView = forwardRef<CodeMirrorHandle, CodeMirrorViewProps>(
           ...searchKeymap,
           indentWithTab,
         ]),
-        createEditorTheme(theme),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
-            onChangeRef.current(update.state.doc.toString());
+            onChangeRef.current(update.state.doc);
           }
         }),
         polishBubbleExtension((sel) => onPolishSelectionRef.current?.(sel)),
-      ];
+      ],
+      [],
+    );
 
-      const state = EditorState.create({
-        doc: defaultValue,
-        extensions,
-      });
-
-      const view = new EditorView({ state, parent: containerRef.current });
+    useLayoutEffect(() => {
+      if (!containerRef.current) return;
+      const view = new EditorView({ parent: containerRef.current });
       viewRef.current = view;
 
       return () => {
         view.destroy();
         viewRef.current = null;
+        loadedDocument.current = undefined;
       };
-    }, [theme]);
+    }, []);
+
+    useLayoutEffect(() => {
+      const view = viewRef.current;
+      if (!view) return;
+      const previous = loadedDocument.current;
+      if (!previous || previous.noteId !== noteId || previous.defaultValue !== defaultValue) {
+        view.setState(
+          EditorState.create({
+            doc: defaultValue,
+            extensions: [
+              extensions,
+              themeCompartment.of(themeExtension),
+              languageCompartment.of(languageExtension),
+            ],
+          }),
+        );
+        view.scrollDOM.scrollTop = 0;
+        view.scrollDOM.scrollLeft = 0;
+        loadedDocument.current = { noteId, defaultValue };
+        return;
+      }
+
+      const effects = [];
+      if (themeCompartment.get(view.state) !== themeExtension) {
+        effects.push(themeCompartment.reconfigure(themeExtension));
+      }
+      if (languageCompartment.get(view.state) !== languageExtension) {
+        effects.push(languageCompartment.reconfigure(languageExtension));
+      }
+      if (effects.length) view.dispatch({ effects });
+    }, [
+      noteId,
+      defaultValue,
+      extensions,
+      themeCompartment,
+      themeExtension,
+      languageCompartment,
+      languageExtension,
+    ]);
 
     return <div ref={containerRef} className={className} />;
   },

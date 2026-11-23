@@ -1,7 +1,7 @@
 import { useMemo, useState, useRef, useEffect, useCallback, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { parseAppError } from '../api';
-import { useApp } from '../contexts/AppContext';
+import { useAppActions, useNoteView, useTags } from '../contexts/AppContext';
 import { buildTagTree, type TagTreeNode } from '../utils/tagParser';
 import { NotesIcon, TrashIcon, PinIcon, HashIcon, SlidersIcon } from './icons';
 import { message } from './message';
@@ -25,8 +25,9 @@ function reportTagError(error: unknown) {
 
 function Sidebar({ width, onResizeStart, onSearchClick, onSettingsClick }: SidebarProps) {
   const { t } = useTranslation();
-  const { state, setViewMode, deleteTag, renameTag, togglePinTag, reorderTags } = useApp();
-  const { viewMode, tags, selectedTagId } = state;
+  const { setViewMode, deleteTag, renameTag, togglePinTag, reorderTags } = useAppActions();
+  const { viewMode, selectedTagId } = useNoteView();
+  const tags = useTags();
 
   const tagTree = useMemo(() => buildTagTree(tags), [tags]);
 

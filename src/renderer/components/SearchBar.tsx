@@ -1,7 +1,7 @@
 import { api, parseAppError, type SearchResult } from '../api';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useApp } from '../contexts/AppContext';
+import { useAppActions } from '../contexts/AppContext';
 import { message } from './message';
 
 interface SearchBarProps {
@@ -12,7 +12,7 @@ function SearchBar({ onClose }: SearchBarProps) {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[] | null>(null);
-  const { selectNote, setViewMode } = useApp();
+  const { selectNote, setViewMode } = useAppActions();
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {

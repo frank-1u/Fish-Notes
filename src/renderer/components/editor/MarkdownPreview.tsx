@@ -1,4 +1,13 @@
-import { useMemo, useCallback, forwardRef, type MouseEvent } from 'react';
+import {
+  memo,
+  useMemo,
+  useCallback,
+  useRef,
+  useImperativeHandle,
+  useLayoutEffect,
+  forwardRef,
+  type MouseEvent,
+} from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { marked } from 'marked';
@@ -93,9 +102,49 @@ function renderMarkdown(md: string): string {
   return html;
 }
 
+function updatePreview(container: HTMLDivElement, html: string) {
+  const template = document.createElement('template');
+  template.innerHTML = html;
+  const previous = container.childNodes;
+  const next = template.content.childNodes;
+
+  // Keep identical leading and trailing blocks mounted. The full Markdown parse
+  // still handles syntax that can change earlier blocks, such as link definitions.
+  let start = 0;
+  while (
+    start < previous.length &&
+    start < next.length &&
+    previous[start].isEqualNode(next[start])
+  ) {
+    start++;
+  }
+  let oldEnd = previous.length;
+  let newEnd = next.length;
+  while (oldEnd > start && newEnd > start && previous[oldEnd - 1].isEqualNode(next[newEnd - 1])) {
+    oldEnd--;
+    newEnd--;
+  }
+  if (oldEnd === start && newEnd === start) return;
+
+  const after = previous[oldEnd] ?? null;
+  for (let index = oldEnd - 1; index >= start; index--) {
+    container.removeChild(previous[index]);
+  }
+  const replacement = document.createDocumentFragment();
+  for (let remaining = newEnd - start; remaining > 0; remaining--) {
+    replacement.appendChild(next[start]);
+  }
+  container.insertBefore(replacement, after);
+}
+
 const MarkdownPreview = forwardRef<HTMLDivElement, MarkdownPreviewProps>(
   ({ value, className }, ref) => {
+    const containerRef = useRef<HTMLDivElement>(null);
+    useImperativeHandle(ref, () => containerRef.current!, []);
     const html = useMemo(() => renderMarkdown(value), [value]);
+    useLayoutEffect(() => {
+      if (containerRef.current) updatePreview(containerRef.current, html);
+    }, [html]);
 
     const handleClick = useCallback((e: MouseEvent<HTMLDivElement>) => {
       if (!(e.target instanceof Element)) return;
@@ -109,10 +158,9 @@ const MarkdownPreview = forwardRef<HTMLDivElement, MarkdownPreviewProps>(
 
     return (
       <div
-        ref={ref}
+        ref={containerRef}
         className={`markdown-preview prose prose-sm max-w-none ${className ?? ''}`}
         onClick={handleClick}
-        dangerouslySetInnerHTML={{ __html: html }}
       />
     );
   },
@@ -120,4 +168,4 @@ const MarkdownPreview = forwardRef<HTMLDivElement, MarkdownPreviewProps>(
 
 MarkdownPreview.displayName = 'MarkdownPreview';
 
-export default MarkdownPreview;
+export default memo(MarkdownPreview);

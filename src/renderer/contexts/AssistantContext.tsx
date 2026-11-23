@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useApp } from './AppContext';
+import { useAppActions } from './AppContext';
 import { message } from '../components/message';
 
 export interface BoundNote {
@@ -36,6 +36,7 @@ export interface Tab {
   title: string;
   boundNote: BoundNote | null;
   messages: UiMessage[];
+  streamingMessage?: UiMessage;
   isStreaming: boolean;
   /** "ask my notes" mode — retrieve from the whole note library before answering */
   useKb: boolean;
@@ -81,6 +82,12 @@ interface AssistantContextValue {
 }
 
 const AssistantContext = createContext<AssistantContextValue | null>(null);
+const AssistantEntryPointsContext = createContext<Pick<
+  AssistantContextValue,
+  'askWithSelection' | 'askAboutNote'
+> | null>(null);
+
+const STREAM_UPDATE_MS = 64;
 
 const AI_TAG = 'AI对话';
 
@@ -123,7 +130,7 @@ function stopStream(stream?: StreamEntry) {
 
 export function AssistantProvider({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
-  const { state, refreshNotes, refreshTags } = useApp();
+  const { getNoteSummary, refreshNotes, refreshTags } = useAppActions();
 
   const [isOpen, setIsOpen] = useState(false);
   // starts with NO tab — a conversation only exists after the user opens one
@@ -167,7 +174,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       chatListRevision.current += 1;
       for (const entry of entries.values()) {
         entry.discard = true;
-        if (entry.timer != null) window.clearInterval(entry.timer);
+        if (entry.timer != null) window.clearTimeout(entry.timer);
         stopStream(entry);
       }
       entries.clear();
@@ -224,13 +231,22 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
       const assistantId = genId();
       let accumulated = '';
-      let revealed = 0;
-      const updateAssistant = (patch: (msg: UiMessage) => UiMessage) => {
+      let thinking = '';
+      let sources: UiMessage['sources'];
+      const assistantMessage = (content: string, streaming: boolean): UiMessage => ({
+        id: assistantId,
+        role: 'assistant',
+        content,
+        thinking,
+        sources,
+        streaming,
+      });
+
+      const publish = () => {
+        entry.timer = undefined;
         if (entry.discard) return;
-        patchTab(key, (tb) => ({
-          ...tb,
-          messages: tb.messages.map((msg) => (msg.id === assistantId ? patch(msg) : msg)),
-        }));
+        const streamingMessage = assistantMessage(accumulated, true);
+        patchTab(key, (tb) => ({ ...tb, streamingMessage }));
       };
 
       try {
@@ -267,11 +283,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         patchTab(key, (tb) => ({
           ...tb,
           title: tb.title || title,
-          messages: [
-            ...tb.messages,
-            userMessage,
-            { id: assistantId, role: 'assistant', content: '', streaming: true },
-          ],
+          messages: [...tb.messages, userMessage],
+          streamingMessage: { id: assistantId, role: 'assistant', content: '', streaming: true },
         }));
         setPrefill('');
         void refreshChats();
@@ -293,31 +306,25 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
             switch (event.type) {
               case 'chunk':
                 accumulated += event.delta;
-                entry.timer ??= window.setInterval(() => {
-                  const backlog = accumulated.length - revealed;
-                  if (backlog === 0) return;
-                  revealed += Math.max(1, Math.ceil(backlog / 24));
-                  const content = accumulated.slice(0, revealed);
-                  updateAssistant((msg) => ({ ...msg, content }));
-                }, 24);
                 break;
               case 'thinking':
-                updateAssistant((msg) => ({
-                  ...msg,
-                  thinking: (msg.thinking ?? '') + event.delta,
-                }));
+                thinking += event.delta;
                 break;
               case 'sources':
-                updateAssistant((msg) => ({ ...msg, sources: event.sources }));
+                sources = event.sources;
                 break;
             }
+            entry.timer ??= window.setTimeout(publish, STREAM_UPDATE_MS);
           },
         );
         entry.stop = stream.abort;
         try {
           accumulated = (await stream.result).fullText;
         } finally {
-          if (entry.timer != null) window.clearInterval(entry.timer);
+          if (entry.timer != null) {
+            window.clearTimeout(entry.timer);
+            publish();
+          }
           if (!entry.discard && accumulated.trim()) {
             try {
               await api.chats.addMessage(chatId, 'assistant', accumulated.trim());
@@ -330,14 +337,12 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       } finally {
         if (streams.current.get(key) === entry) {
           streams.current.delete(key);
-          const content = accumulated.trim();
+          const reply = assistantMessage(accumulated.trim(), false);
           patchTab(key, (tb) => ({
             ...tb,
             isStreaming: false,
-            messages: tb.messages.flatMap((msg) => {
-              if (msg.id !== assistantId) return [msg];
-              return content ? [{ ...msg, streaming: false, content }] : [];
-            }),
+            streamingMessage: undefined,
+            messages: reply.content ? [...tb.messages, reply] : tb.messages,
           }));
         }
       }
@@ -406,7 +411,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       const msgs = await api.chats.getMessages(id);
       if (historySelection.current !== selection) return;
       const boundId = msgs.find((m) => m.noteId)?.noteId;
-      const note = state.notes.find((n) => n.id === boundId);
+      const note = boundId ? getNoteSummary(boundId) : undefined;
       const tab: Tab = {
         key: genId(),
         chatId: id,
@@ -419,7 +424,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       setTabs((prev) => [...prev, tab]);
       setActiveKey(tab.key);
     },
-    [chats, state.notes, t],
+    [chats, getNoteSummary, t],
   );
 
   const deleteChat = useCallback(
@@ -509,11 +514,25 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  return <AssistantContext.Provider value={value}>{children}</AssistantContext.Provider>;
+  const entryPoints = useMemo(
+    () => ({ askWithSelection, askAboutNote }),
+    [askWithSelection, askAboutNote],
+  );
+  return (
+    <AssistantEntryPointsContext.Provider value={entryPoints}>
+      <AssistantContext.Provider value={value}>{children}</AssistantContext.Provider>
+    </AssistantEntryPointsContext.Provider>
+  );
 }
 
 export function useAssistant(): AssistantContextValue {
   const ctx = useContext(AssistantContext);
   if (!ctx) throw new Error('useAssistant must be used within AssistantProvider');
   return ctx;
+}
+
+export function useAssistantEntryPoints() {
+  const context = useContext(AssistantEntryPointsContext);
+  if (!context) throw new Error('useAssistantEntryPoints must be used within AssistantProvider');
+  return context;
 }
