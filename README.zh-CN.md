@@ -20,35 +20,35 @@
 
 在 [GitHub Releases](https://github.com/frank-1u/Fish-Notes/releases) 下载 Windows x64 打包产物。
 
-| 版本 | 文件 |
-| --- | --- |
-| NSIS 安装包 | `*-setup.exe` |
-| 便携版 | `Fish-Notes-<version>-windows-x64-portable.zip`，内含 `fish-notes.exe` |
+| 版本        | 文件                                                                   |
+| ----------- | ---------------------------------------------------------------------- |
+| NSIS 安装包 | `*-setup.exe`                                                          |
+| 便携版      | `Fish-Notes-<version>-windows-x64-portable.zip`，内含 `fish-notes.exe` |
 
 应用使用系统 Microsoft Edge WebView2 Runtime。安装包在需要时下载 WebView2 引导程序。运行便携版前，请确认系统已安装 WebView2。
 
 ## 界面预览
 
-|              编辑器（分屏）               |               多主题                |
-| :---------------------------------------: | :---------------------------------: |
+|              编辑器（分屏）              |                 多主题                 |
+| :--------------------------------------: | :------------------------------------: |
 | ![编辑器](./docs/screenshots/editor.png) | ![主题](./docs/screenshots/themes.png) |
 
 ## 技术栈
 
-| 层面     | 选型                                                |
-| -------- | --------------------------------------------------- |
-| 桌面框架 | Tauri v2 + Rust + 系统 WebView               |
-| 前端     | React 18 + TypeScript 5.7 + Vite 5                           |
-| UI/样式  | Tailwind CSS 3 + CSS Variables                      |
-| 编辑器   | CodeMirror 6（Markdown 源码 + 实时高亮）            |
-| 预览渲染 | marked（GFM + breaks）                              |
-| 数据库   | rusqlite 内置 SQLite，使用 WAL 和 r2d2                        |
-| 全文搜索 | SQLite FTS5                                         |
-| 加密     | AES-256-GCM + scrypt                                |
-| AI       | OpenAI-compatible 与 Anthropic Messages HTTP API    |
-| 国际化   | i18next + react-i18next                             |
-| 导出     | Markdown / 净化后的 HTML / 系统打印为 PDF |
-| 包管理   | Yarn Classic                                                |
+| 层面     | 选型                                             |
+| -------- | ------------------------------------------------ |
+| 桌面框架 | Tauri v2 + Rust + 系统 WebView                   |
+| 前端     | React 18 + TypeScript 5.7 + Vite 5               |
+| UI/样式  | Tailwind CSS 3 + CSS Variables                   |
+| 编辑器   | CodeMirror 6（Markdown 源码 + 实时高亮）         |
+| 预览渲染 | marked（GFM + breaks）                           |
+| 数据库   | rusqlite 内置 SQLite，使用 WAL 和 r2d2           |
+| 全文搜索 | SQLite FTS5                                      |
+| 加密     | AES-256-GCM + scrypt                             |
+| AI       | OpenAI-compatible 与 Anthropic Messages HTTP API |
+| 国际化   | i18next + react-i18next                          |
+| 导出     | Markdown / 净化后的 HTML / 系统打印为 PDF        |
+| 包管理   | Yarn Classic                                     |
 
 ## 功能
 

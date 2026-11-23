@@ -18,6 +18,8 @@ jobs:
           node-version: 22
           cache: yarn
       - run: yarn install --frozen-lockfile
+      - run: npx eslint --ext .ts,.tsx --quiet .
+      - run: yarn format:check
       - run: npx tsc --noEmit
       - run: npx vite build
 

@@ -62,7 +62,11 @@ export default function PolishDialog({
           style={{ borderColor: 'var(--border-primary)' }}
         >
           <h2 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
-            <SparklesIcon size={16} style={{ display: 'inline', verticalAlign: '-2px', color: 'var(--accent-solid)' }} /> {t('AI Polish Suggestion')}
+            <SparklesIcon
+              size={16}
+              style={{ display: 'inline', verticalAlign: '-2px', color: 'var(--accent-solid)' }}
+            />{' '}
+            {t('AI Polish Suggestion')}
           </h2>
           <div className="flex items-center gap-2">
             {polished && !loading && !error && (

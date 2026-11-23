@@ -76,7 +76,11 @@ function ThinkingBlock({ msg }: { msg: UiMessage }) {
       <button
         onClick={() => !live && setExpanded((v) => !v)}
         className="flex items-center gap-1"
-        style={{ fontSize: 11, color: 'var(--text-tertiary)', cursor: live ? 'default' : 'pointer' }}
+        style={{
+          fontSize: 11,
+          color: 'var(--text-tertiary)',
+          cursor: live ? 'default' : 'pointer',
+        }}
       >
         <span
           style={{
@@ -154,7 +158,10 @@ const MessageBubble = memo(function MessageBubble({
         ) : null}
       </div>
       {!isUser && !!msg.sources?.length && (
-        <div className="flex flex-wrap items-center gap-1.5" style={{ marginTop: 6, maxWidth: '85%' }}>
+        <div
+          className="flex flex-wrap items-center gap-1.5"
+          style={{ marginTop: 6, maxWidth: '85%' }}
+        >
           <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{t('Sources')}</span>
           {msg.sources.map((src) => (
             <button
@@ -170,9 +177,7 @@ const MessageBubble = memo(function MessageBubble({
               title={src.title}
             >
               <FileIcon size={10} />
-              <span
-                style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-              >
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {src.title}
               </span>
             </button>
@@ -194,8 +199,12 @@ const MessageBubble = memo(function MessageBubble({
             ⧉ {t('Copy')}
           </button>
           {onSaveNote && (
-            <button onClick={() => onSaveNote(msg.content)} style={{ color: 'var(--text-tertiary)' }}>
-              <NotesIcon size={12} style={{ display: 'inline', verticalAlign: '-1px' }} /> {t('Save as note')}
+            <button
+              onClick={() => onSaveNote(msg.content)}
+              style={{ color: 'var(--text-tertiary)' }}
+            >
+              <NotesIcon size={12} style={{ display: 'inline', verticalAlign: '-1px' }} />{' '}
+              {t('Save as note')}
             </button>
           )}
         </div>
@@ -501,7 +510,9 @@ export default function ChatPanel() {
                   </span>
                 )}
                 {tb.isStreaming && <span>•</span>}
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span
+                  style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                >
                   {tb.title || (tb.boundNote ? tb.boundNote.title : t('New chat'))}
                 </span>
                 <button
@@ -595,63 +606,72 @@ export default function ChatPanel() {
 
       {/* Composer (only when a conversation is open) */}
       {activeTab && (
-      <div className="px-3 py-2.5 shrink-0" style={{ borderTop: '1px solid var(--border-primary)' }}>
         <div
-          className="flex items-end gap-2 rounded-lg px-2 py-1.5"
-          style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-primary)' }}
+          className="px-3 py-2.5 shrink-0"
+          style={{ borderTop: '1px solid var(--border-primary)' }}
         >
-          {isFree && (
-            <button
-              onClick={toggleKb}
-              title={t('Ask my notes')}
-              className="flex items-center justify-center rounded shrink-0 transition-colors"
-              style={{
-                width: 24,
-                height: 24,
-                marginBottom: 1,
-                background: activeTab?.useKb ? 'var(--accent-soft-bg)' : 'transparent',
-                color: activeTab?.useKb ? 'var(--accent-solid)' : 'var(--text-tertiary)',
-              }}
-            >
-              <BookIcon size={15} />
-            </button>
-          )}
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={onKeyDown}
-            rows={1}
-            placeholder={
-              boundNote
-                ? t('Ask about this note…')
-                : activeTab?.useKb
-                  ? t('Ask your notes…')
-                  : t('Ask anything…')
-            }
-            className="flex-1 resize-none outline-none bg-transparent text-sm"
-            style={{ color: 'var(--text-primary)', maxHeight: 120, overflowY: 'auto' }}
-          />
-          {isStreaming ? (
-            <button
-              onClick={abort}
-              title={t('Stop')}
-              style={{ color: '#ef4444', fontSize: 16, lineHeight: 1 }}
-            >
-              ■
-            </button>
-          ) : (
-            <button
-              onClick={submit}
-              disabled={!input.trim()}
-              title={t('Send')}
-              style={{ color: input.trim() ? 'var(--text-active)' : 'var(--text-tertiary)', fontSize: 16 }}
-            >
-              <SendIcon size={16} />
-            </button>
-          )}
+          <div
+            className="flex items-end gap-2 rounded-lg px-2 py-1.5"
+            style={{
+              backgroundColor: 'var(--bg-secondary)',
+              border: '1px solid var(--border-primary)',
+            }}
+          >
+            {isFree && (
+              <button
+                onClick={toggleKb}
+                title={t('Ask my notes')}
+                className="flex items-center justify-center rounded shrink-0 transition-colors"
+                style={{
+                  width: 24,
+                  height: 24,
+                  marginBottom: 1,
+                  background: activeTab?.useKb ? 'var(--accent-soft-bg)' : 'transparent',
+                  color: activeTab?.useKb ? 'var(--accent-solid)' : 'var(--text-tertiary)',
+                }}
+              >
+                <BookIcon size={15} />
+              </button>
+            )}
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={onKeyDown}
+              rows={1}
+              placeholder={
+                boundNote
+                  ? t('Ask about this note…')
+                  : activeTab?.useKb
+                    ? t('Ask your notes…')
+                    : t('Ask anything…')
+              }
+              className="flex-1 resize-none outline-none bg-transparent text-sm"
+              style={{ color: 'var(--text-primary)', maxHeight: 120, overflowY: 'auto' }}
+            />
+            {isStreaming ? (
+              <button
+                onClick={abort}
+                title={t('Stop')}
+                style={{ color: '#ef4444', fontSize: 16, lineHeight: 1 }}
+              >
+                ■
+              </button>
+            ) : (
+              <button
+                onClick={submit}
+                disabled={!input.trim()}
+                title={t('Send')}
+                style={{
+                  color: input.trim() ? 'var(--text-active)' : 'var(--text-tertiary)',
+                  fontSize: 16,
+                }}
+              >
+                <SendIcon size={16} />
+              </button>
+            )}
+          </div>
         </div>
-      </div>
       )}
     </div>
   );
@@ -664,9 +684,7 @@ function NoTabState({ onNew }: { onNew: () => void }) {
       <div style={{ color: 'var(--accent-solid)', display: 'inline-flex' }}>
         <RobotIcon size={34} strokeWidth={1.5} />
       </div>
-      <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-        {t('No conversation yet')}
-      </div>
+      <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{t('No conversation yet')}</div>
       <button
         onClick={onNew}
         className="fn-accent-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium"
@@ -770,7 +788,10 @@ function EmptyState({ bound, onPick }: { bound: boolean; onPick: (text: string) 
             <button style={chip} onClick={() => onPick(t('Summarize the key points of this note'))}>
               {t('Summarize this note')}
             </button>
-            <button style={chip} onClick={() => onPick(t('Extract the action items from this note'))}>
+            <button
+              style={chip}
+              onClick={() => onPick(t('Extract the action items from this note'))}
+            >
               {t('Extract action items')}
             </button>
           </>
@@ -799,7 +820,10 @@ function HistoryList({
   return (
     <div className="flex-1 overflow-y-auto px-2 py-2">
       {chats.length === 0 ? (
-        <div className="text-center text-xs" style={{ color: 'var(--text-tertiary)', marginTop: 24 }}>
+        <div
+          className="text-center text-xs"
+          style={{ color: 'var(--text-tertiary)', marginTop: 24 }}
+        >
           {t('No conversations yet')}
         </div>
       ) : (

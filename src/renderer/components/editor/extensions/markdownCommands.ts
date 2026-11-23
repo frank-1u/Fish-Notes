@@ -370,5 +370,4 @@ export function insertTable(rows: number, cols: number): Command {
   };
 }
 
-
 export type MarkdownCommand = Command;

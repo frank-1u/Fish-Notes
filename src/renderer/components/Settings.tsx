@@ -1,6 +1,5 @@
 import { api, parseAppError, type AIConfig, type AiProtocol } from '../api';
-import { useState, useCallback, useEffect, useRef, Fragment } from 'react';
-import { createPortal } from 'react-dom';
+import { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAppActions, useEncryption } from '../contexts/AppContext';
