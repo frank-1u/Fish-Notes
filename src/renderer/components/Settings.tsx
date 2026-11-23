@@ -1,4 +1,4 @@
-import { api, parseAppError } from '../api';
+import { api, parseAppError, type AIConfig, type AiProtocol } from '../api';
 import { useState, useCallback, useEffect, useRef, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
@@ -17,27 +17,12 @@ const languages = [
   { id: 'en', label: 'English' },
 ];
 
-const CLAUDE_MODEL_GROUPS: {
-  labelKey: string;
-  models: { value: string; labelKey: string }[];
-}[] = [
-  {
-    labelKey: '',
-    models: [
-      { value: 'claude-fable-5', labelKey: 'Fable 5 (most capable, premium)' },
-      { value: 'claude-opus-4-8', labelKey: 'Opus 4.8 (strongest, deep analysis)' },
-      { value: 'claude-sonnet-4-6', labelKey: 'Sonnet 4.6 (balanced, default)' },
-      { value: 'claude-haiku-4-5-20251001', labelKey: 'Haiku 4.5 (fastest, short summaries)' },
-    ],
-  },
-  {
-    labelKey: 'Others',
-    models: [
-      { value: 'claude-opus-4-7', labelKey: 'Opus 4.7' },
-      { value: 'claude-opus-4-6', labelKey: 'Opus 4.6' },
-    ],
-  },
-];
+const AI_INPUT_CLASS = 'w-full px-3 py-2 rounded-lg border text-sm outline-none';
+const AI_INPUT_STYLE = {
+  backgroundColor: 'var(--bg-secondary)',
+  borderColor: 'var(--border-primary)',
+  color: 'var(--text-primary)',
+};
 
 function Settings({ onClose }: SettingsProps) {
   const { t, i18n } = useTranslation();
@@ -52,60 +37,66 @@ function Settings({ onClose }: SettingsProps) {
   const [loading, setLoading] = useState(false);
   const [assistantOn, setAssistantOn] = useState(isAssistantEnabled);
 
-  // AI config state. The token is write-only: the main process never sends it back to
-  // the renderer, so we only know whether one is stored (hasToken). An empty field on
-  // save means "keep the existing token".
-  const [aiToken, setAiToken] = useState('');
-  const [aiHasToken, setAiHasToken] = useState(false);
-  const [aiModel, setAiModel] = useState('claude-sonnet-4-6');
-  const [aiClaudePath, setAiClaudePath] = useState('');
-  const [aiTesting, setAiTesting] = useState(false);
+  const [aiConfig, setAiConfig] = useState<AIConfig>({
+    protocol: 'openai',
+    baseUrl: '',
+    model: '',
+    apiKey: '',
+  });
+  const [aiHasKey, setAiHasKey] = useState(false);
+  const [aiStatus, setAiStatus] = useState<'loading' | 'saving' | 'testing' | 'idle'>('loading');
 
   useEffect(() => {
-    api.ai.getConfig().then((cfg) => {
-      setAiHasToken(cfg.hasToken);
-      setAiModel(cfg.model || 'claude-sonnet-4-6');
-      setAiClaudePath(cfg.claudePath || '');
-    });
+    let active = true;
+    api.ai
+      .getConfig()
+      .then((config) => {
+        if (!active || !config) return;
+        const { hasApiKey, ...fields } = config;
+        setAiHasKey(hasApiKey);
+        setAiConfig({ ...fields, apiKey: '' });
+      })
+      .catch((error) => {
+        if (active) message.error(parseAppError(error).message);
+      })
+      .finally(() => {
+        if (active) setAiStatus('idle');
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
-  const persistAI = useCallback(async () => {
-    await api.ai.setConfig({
-      token: aiToken.trim(),
-      model: aiModel.trim() || 'claude-sonnet-4-6',
-      claudePath: aiClaudePath.trim() || undefined,
-    });
-  }, [aiToken, aiModel, aiClaudePath]);
-
   const handleSaveAI = useCallback(async () => {
-    await persistAI();
-    if (aiToken.trim()) {
-      setAiHasToken(true);
-      setAiToken(''); // keep write-only: don't retain the plaintext token in the field
+    setAiStatus('saving');
+    try {
+      await api.ai.setConfig(aiConfig);
+      setAiHasKey(true);
+      setAiConfig((fields) => ({ ...fields, apiKey: '' }));
+      message.success(t('Saved'));
+    } catch (error) {
+      message.error(parseAppError(error).message);
+    } finally {
+      setAiStatus('idle');
     }
-    message.success(t('Saved'));
-  }, [persistAI, aiToken, t]);
+  }, [aiConfig, t]);
 
   const handleTestAI = useCallback(async () => {
-    setAiTesting(true);
+    setAiStatus('testing');
     try {
-      const r = await api.ai.testConnection({
-        token: aiToken.trim(),
-        model: aiModel.trim() || 'claude-sonnet-4-6',
-        claudePath: aiClaudePath.trim() || undefined,
+      const reply = await api.ai.testConnection(aiConfig);
+      message.success(`${t('Connection successful')} · ${reply}`);
+    } catch (error) {
+      modal.error({
+        title: t('Connection failed'),
+        content: (
+          <pre className="whitespace-pre-wrap break-all">{parseAppError(error).message}</pre>
+        ),
       });
-      if (r.ok) {
-        message.success(`${t('Connected. Claude replied:')} ${r.reply}`);
-      } else {
-        modal.error({
-          title: t('Connection failed'),
-          content: <pre className="whitespace-pre-wrap break-all">{r.error}</pre>,
-        });
-      }
     } finally {
-      setAiTesting(false);
+      setAiStatus('idle');
     }
-  }, [aiToken, aiModel, aiClaudePath, t]);
+  }, [aiConfig, t]);
 
   const themes = [
     { id: 'light' as const, label: t('Light'), preview: 'bg-white border-gray-200' },
@@ -594,218 +585,110 @@ function Settings({ onClose }: SettingsProps) {
             </label>
           </div>
 
-          {/* AI section */}
           <div className="px-6 pb-5">
-            <h3 className="text-sm font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>
-              {t('Claude AI Config')}
+            <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>
+              {t('AI Provider')}
             </h3>
-            <p className="text-xs mb-3 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-              {t('Call Claude via Claude Code CLI OAuth token, no API key needed.')}
-            </p>
+            {!aiHasKey && aiStatus !== 'loading' && (
+              <p className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>
+                {t('Enter your API provider settings to start using the assistant.')}
+              </p>
+            )}
 
-            <div className="flex flex-col gap-3 text-sm">
-              <div>
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <label className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                    {t('OAuth Token')}
-                  </label>
-                  <TokenInfoIcon t={t} />
-                </div>
+            <fieldset
+              disabled={aiStatus !== 'idle'}
+              className="flex flex-col gap-3 text-sm disabled:opacity-60"
+            >
+              <label>
+                <span className="block text-xs mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                  {t('Protocol')}
+                </span>
+                <select
+                  value={aiConfig.protocol}
+                  onChange={(event) =>
+                    setAiConfig({ ...aiConfig, protocol: event.target.value as AiProtocol })
+                  }
+                  className={AI_INPUT_CLASS}
+                  style={AI_INPUT_STYLE}
+                >
+                  <option value="openai">OpenAI-compatible</option>
+                  <option value="anthropic">Anthropic Messages</option>
+                </select>
+              </label>
+
+              <label>
+                <span className="block text-xs mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                  {t('Base URL')}
+                </span>
+                <input
+                  type="url"
+                  value={aiConfig.baseUrl}
+                  onChange={(event) => setAiConfig({ ...aiConfig, baseUrl: event.target.value })}
+                  placeholder={
+                    aiConfig.protocol === 'anthropic'
+                      ? 'https://api.anthropic.com'
+                      : 'https://api.openai.com/v1'
+                  }
+                  className={`${AI_INPUT_CLASS} font-mono`}
+                  style={AI_INPUT_STYLE}
+                />
+              </label>
+
+              <label>
+                <span className="block text-xs mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                  {t('API Key')}
+                </span>
                 <input
                   type="password"
-                  value={aiToken}
-                  onChange={(e) => {
-                    setAiToken(e.target.value);
-                  }}
-                  placeholder={aiHasToken ? t('Token saved — leave blank to keep') : 'sk-ant-oat01-...'}
-                  className="w-full px-3 py-2 rounded-lg border text-sm outline-none font-mono"
-                  style={{
-                    backgroundColor: 'var(--bg-secondary)',
-                    borderColor: 'var(--border-primary)',
-                    color: 'var(--text-primary)',
-                  }}
+                  autoComplete="new-password"
+                  value={aiConfig.apiKey}
+                  onChange={(event) => setAiConfig({ ...aiConfig, apiKey: event.target.value })}
+                  placeholder={aiHasKey ? t('Leave blank to keep your saved API key') : undefined}
+                  className={`${AI_INPUT_CLASS} font-mono`}
+                  style={AI_INPUT_STYLE}
                 />
-              </div>
+              </label>
 
-              <div>
-                <label className="block text-xs mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+              <label>
+                <span className="block text-xs mb-1.5" style={{ color: 'var(--text-secondary)' }}>
                   {t('Model')}
-                </label>
-                <select
-                  value={aiModel}
-                  onChange={(e) => {
-                    setAiModel(e.target.value);
-                  }}
-                  className="w-full px-3 py-2 rounded-lg border text-sm outline-none"
-                  style={{
-                    backgroundColor: 'var(--bg-secondary)',
-                    borderColor: 'var(--border-primary)',
-                    color: 'var(--text-primary)',
-                  }}
-                >
-                  {CLAUDE_MODEL_GROUPS.map((group) => {
-                    const options = group.models.map((m) => (
-                      <option key={m.value} value={m.value}>
-                        {t(m.labelKey)}
-                      </option>
-                    ));
-                    return group.labelKey ? (
-                      <optgroup key={group.labelKey} label={t(group.labelKey)}>
-                        {options}
-                      </optgroup>
-                    ) : (
-                      <Fragment key="latest">{options}</Fragment>
-                    );
-                  })}
-                </select>
-              </div>
-
-              <details className="text-xs">
-                <summary className="cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
-                  {t('Advanced: custom claude CLI path (only if not found)')}
-                </summary>
-                <div className="mt-2">
-                  <input
-                    type="text"
-                    value={aiClaudePath}
-                    onChange={(e) => {
-                      setAiClaudePath(e.target.value);
-                    }}
-                    placeholder={t('Leave empty to auto-detect')}
-                    className="w-full px-3 py-2 rounded-lg border text-sm outline-none font-mono"
-                    style={{
-                      backgroundColor: 'var(--bg-secondary)',
-                      borderColor: 'var(--border-primary)',
-                      color: 'var(--text-primary)',
-                    }}
-                  />
-                  <p className="mt-1" style={{ color: 'var(--text-tertiary)' }}>
-                    {t('Run `which claude` in terminal to find it.')}
-                  </p>
-                </div>
-              </details>
+                </span>
+                <input
+                  type="text"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  value={aiConfig.model}
+                  onChange={(event) => setAiConfig({ ...aiConfig, model: event.target.value })}
+                  className={AI_INPUT_CLASS}
+                  style={AI_INPUT_STYLE}
+                />
+              </label>
 
               <div className="flex items-center gap-2 pt-1">
                 <button
+                  type="button"
                   onClick={handleSaveAI}
                   className="px-3 py-1.5 rounded-lg text-sm text-white transition-colors"
                   style={{ backgroundColor: '#f97316' }}
                 >
-                  {t('Save')}
+                  {aiStatus === 'saving' ? t('Processing...') : t('Save')}
                 </button>
                 <button
+                  type="button"
                   onClick={handleTestAI}
-                  disabled={aiTesting}
-                  className="px-3 py-1.5 rounded-lg text-sm border transition-colors disabled:opacity-50"
+                  className="px-3 py-1.5 rounded-lg text-sm border transition-colors"
                   style={{ borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}
                 >
-                  {aiTesting ? t('Testing...') : t('Test connection')}
+                  {aiStatus === 'testing' ? t('Testing...') : t('Test connection')}
                 </button>
               </div>
-            </div>
+            </fieldset>
           </div>
 
           {/* /Scrollable body */}
         </div>
       </div>
     </div>
-  );
-}
-
-function TokenInfoIcon({ t }: { t: (key: string) => string }) {
-  const [visible, setVisible] = useState(false);
-  const [pos, setPos] = useState({ x: 0, y: 0 });
-  const iconRef = useRef<HTMLSpanElement>(null);
-  const hideTimerRef = useRef<number | null>(null);
-
-  const show = useCallback(() => {
-    if (hideTimerRef.current) {
-      clearTimeout(hideTimerRef.current);
-      hideTimerRef.current = null;
-    }
-    const rect = iconRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    setPos({ x: rect.left + rect.width / 2, y: rect.bottom + 6 });
-    setVisible(true);
-  }, []);
-
-  const scheduleHide = useCallback(() => {
-    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    hideTimerRef.current = window.setTimeout(() => setVisible(false), 200);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    };
-  }, []);
-
-  return (
-    <>
-      <span
-        ref={iconRef}
-        onMouseEnter={show}
-        onMouseLeave={scheduleHide}
-        className="inline-flex cursor-help"
-        style={{ color: 'var(--text-tertiary)' }}
-      >
-        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-          />
-        </svg>
-      </span>
-      {visible &&
-        createPortal(
-          <div
-            className="fixed z-[9999]"
-            onMouseEnter={show}
-            onMouseLeave={scheduleHide}
-            style={{
-              left: pos.x,
-              top: pos.y,
-              transform: 'translate(-50%, 0)',
-              maxWidth: 360,
-            }}
-          >
-            <div
-              className="px-3 py-2 rounded-md text-xs shadow-lg leading-relaxed select-text"
-              style={{
-                backgroundColor: 'var(--text-primary)',
-                color: 'var(--bg-primary)',
-              }}
-            >
-              <div className="mb-1.5">{t('Generation steps:')}</div>
-              <div className="flex flex-wrap items-center gap-y-1.5">
-                <code
-                  className="inline-block px-1.5 py-0.5 rounded font-mono cursor-text"
-                  style={{ backgroundColor: 'rgba(255,255,255,0.15)' }}
-                >
-                  npm i -g @anthropic-ai/claude-code
-                </code>
-                <span className="mx-1.5">→</span>
-                <code
-                  className="inline-block px-1.5 py-0.5 rounded font-mono cursor-text"
-                  style={{ backgroundColor: 'rgba(255,255,255,0.15)' }}
-                >
-                  claude /login
-                </code>
-                <span className="mx-1.5">→</span>
-                <code
-                  className="inline-block px-1.5 py-0.5 rounded font-mono cursor-text"
-                  style={{ backgroundColor: 'rgba(255,255,255,0.15)' }}
-                >
-                  claude setup-token
-                </code>
-              </div>
-            </div>
-          </div>,
-          document.body,
-        )}
-    </>
   );
 }
 

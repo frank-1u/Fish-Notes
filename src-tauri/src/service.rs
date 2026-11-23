@@ -3,13 +3,14 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use crate::{crypto::SessionKey, db, AppError};
+use crate::{ai::AiState, crypto::SessionKey, db, AppError};
 
 #[derive(Clone)]
 pub struct AppService {
     pub(crate) database: db::Database,
     pub(crate) data_dir: PathBuf,
     pub(crate) session_key: Arc<RwLock<Option<SessionKey>>>,
+    pub(crate) ai: Arc<AiState>,
 }
 
 impl AppService {
@@ -18,6 +19,7 @@ impl AppService {
             database: db::open(data_dir)?,
             data_dir: data_dir.to_path_buf(),
             session_key: Arc::default(),
+            ai: Arc::new(AiState::new()?),
         })
     }
 }

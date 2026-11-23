@@ -1,3 +1,5 @@
+mod ai;
+mod chats;
 mod commands;
 mod crypto;
 mod db;
@@ -9,6 +11,10 @@ mod search;
 mod service;
 mod tags;
 
+pub use ai::{
+    AiConfig, AiProtocol, ChatRequest, ChatScope, ChatStreamEvent, NoteSource, PublicAiConfig,
+};
+pub use chats::{ChatData, ChatMessageData, ChatRole, Message};
 pub use desktop::run;
 pub use error::AppError;
 pub use notes::{NoteData, NoteSummary, NoteUpdate};
