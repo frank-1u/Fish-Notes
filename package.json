@@ -1,7 +1,7 @@
 {
   "name": "fish-notes",
   "productName": "Fish Notes",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A Markdown note-taking app built with React + Tauri",
   "private": true,
   "scripts": {
