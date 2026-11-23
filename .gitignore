@@ -96,3 +96,6 @@ out/
 
 # Personal agent-collaboration rules (per-machine, synced to worktrees via .worktree-copy-local)
 /docs/agents/collaboration.md
+
+# Claude Code per-project local settings
+/.claude/settings.local.json
