@@ -35,11 +35,17 @@ export const imageHandling = EditorView.domEventHandlers({
 
     const pos =
       view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? view.state.selection.main.from;
+    const doc = view.state.doc;
 
     void (async () => {
+      const images: string[] = [];
       for (const file of imageFiles) {
         const md = await fileToMarkdown(file);
-        if (md) insertAt(view, view.state.selection.main.from || pos, md);
+        if (md) images.push(md);
+      }
+      if (images.length > 0) {
+        const insertionPoint = view.state.doc === doc ? pos : view.state.selection.main.from;
+        insertAt(view, insertionPoint, images.join('\n'));
       }
     })();
 

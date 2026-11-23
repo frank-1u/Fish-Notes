@@ -1,4 +1,5 @@
 import { useMemo, useCallback, forwardRef, type MouseEvent } from 'react';
+import { convertFileSrc } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
@@ -70,10 +71,17 @@ function renderMarkdown(md: string): string {
     },
   );
 
-  let html = marked.parse(processed, { async: false, breaks: true, gfm: true }) as string;
+  const rendered = marked.parse(processed, { async: false, breaks: true, gfm: true });
   // Sanitize marked's output before our trusted post-processing — note content may
   // contain <script>, onerror=, javascript: links, etc.
-  html = DOMPurify.sanitize(html, SANITIZE_CONFIG) as string;
+  const fragment = DOMPurify.sanitize(rendered, { ...SANITIZE_CONFIG, RETURN_DOM_FRAGMENT: true });
+  for (const image of fragment.querySelectorAll('img[src]')) {
+    const filename = image.getAttribute('src')?.match(/^fish-image:\/\/([^/?#]+)$/i)?.[1];
+    if (filename) image.setAttribute('src', convertFileSrc(filename, 'fish-image'));
+  }
+  const template = document.createElement('template');
+  template.content.append(fragment);
+  let html = template.innerHTML;
   for (let i = 0; i < tagPlaceholders.length; i++) {
     html = html.replace(`%%HASHTAG_${i}%%`, `<span class="hashtag">${tagPlaceholders[i]}</span>`);
   }

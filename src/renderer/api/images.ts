@@ -1,8 +1,9 @@
-import { unavailable } from './client';
+import { invokeCommand } from './client';
 
-// T4 replaces this placeholder.
 export const images = {
-  async saveFromBuffer(_buffer: ArrayBuffer, _mimeType: string): Promise<string> {
-    throw unavailable('Images');
+  saveFromBuffer(buffer: ArrayBuffer, mimeType: string): Promise<string> {
+    return invokeCommand<string>('images_save_from_buffer', buffer, {
+      headers: { 'x-mime-type': mimeType },
+    });
   },
 };

@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, type InvokeArgs, type InvokeOptions } from '@tauri-apps/api/core';
 
 export class AppError extends Error {
   constructor(
@@ -22,10 +22,11 @@ export function parseAppError(error: unknown): AppError {
 
 export async function invokeCommand<T>(
   command: string,
-  args?: Record<string, unknown>,
+  args?: InvokeArgs,
+  options?: InvokeOptions,
 ): Promise<T> {
   try {
-    return await invoke<T>(command, args);
+    return await invoke<T>(command, args, options);
   } catch (error) {
     throw parseAppError(error);
   }

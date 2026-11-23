@@ -2,6 +2,7 @@ mod commands;
 mod db;
 mod desktop;
 mod error;
+mod images;
 mod notes;
 mod service;
 

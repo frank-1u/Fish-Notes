@@ -11,6 +11,7 @@ custom-protocol = ["tauri/custom-protocol"]
 
 [dependencies]
 log = "0.4"
+percent-encoding = "2"
 r2d2 = "0.8"
 r2d2_sqlite = "0.34"
 rusqlite = { version = "0.39", features = ["bundled"] }

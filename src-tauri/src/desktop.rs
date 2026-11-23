@@ -1,13 +1,21 @@
-use std::{env, path::PathBuf};
+use std::{env, io::ErrorKind, path::PathBuf};
 
-use tauri::{webview::NewWindowResponse, Manager, Url, WebviewWindowBuilder};
+use tauri::{
+    http::{header, Response, StatusCode},
+    webview::NewWindowResponse,
+    Manager, Url, WebviewWindowBuilder,
+};
 use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
 use tauri_plugin_opener::OpenerExt;
 
-use crate::{commands, AppService};
+use crate::{commands, AppError, AppService};
 
 pub fn run() {
     tauri::Builder::default()
+        .register_uri_scheme_protocol("fish-image", |context, request| {
+            let service = context.app_handle().state::<AppService>();
+            serve_image(&service, request.uri().path())
+        })
         .plugin(
             tauri_plugin_log::Builder::new()
                 .targets([Target::new(TargetKind::LogDir { file_name: None })])
@@ -65,6 +73,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::images_save_from_buffer,
             commands::notes_create,
             commands::notes_list,
             commands::notes_get,
@@ -76,6 +85,35 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Fish Notes");
+}
+
+fn serve_image(service: &AppService, path: &str) -> Response<Vec<u8>> {
+    let response = Response::builder()
+        .header(header::X_CONTENT_TYPE_OPTIONS, "nosniff")
+        .header(
+            header::CONTENT_SECURITY_POLICY,
+            "sandbox; default-src 'none'; style-src 'unsafe-inline'",
+        );
+    let status = match service.read_image(path) {
+        Ok((mime_type, bytes)) => {
+            return response
+                .header(header::CONTENT_TYPE, mime_type)
+                .body(bytes)
+                .expect("valid image response");
+        }
+        Err(AppError::InvalidImagePath) => StatusCode::NOT_FOUND,
+        Err(AppError::ImageStorage(error)) if error.kind() == ErrorKind::NotFound => {
+            StatusCode::NOT_FOUND
+        }
+        Err(error) => {
+            log::warn!("{error}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    };
+    response
+        .status(status)
+        .body(Vec::new())
+        .expect("valid image error response")
 }
 
 fn open_external(app: &tauri::AppHandle, url: &Url) {

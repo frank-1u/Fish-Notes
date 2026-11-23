@@ -13,6 +13,14 @@ pub enum AppError {
     Pool(#[from] r2d2::Error),
     #[error("Data directory could not be created: {0}")]
     DataDirectory(#[from] std::io::Error),
+    #[error("Unsupported image MIME type.")]
+    UnsupportedImageType,
+    #[error("Expected a raw image upload.")]
+    InvalidImageUpload,
+    #[error("Invalid image path.")]
+    InvalidImagePath,
+    #[error("Image storage operation failed: {0}")]
+    ImageStorage(std::io::Error),
 }
 
 impl Serialize for AppError {
@@ -24,6 +32,13 @@ impl Serialize for AppError {
             Self::DataDirectory(_) => {
                 ("data_directory_error", "The data directory is unavailable.")
             }
+            Self::UnsupportedImageType => ("unsupported_image_type", "Unsupported image type."),
+            Self::InvalidImageUpload => ("invalid_image_upload", "Expected a raw image upload."),
+            Self::InvalidImagePath => ("invalid_image_path", "Invalid image path."),
+            Self::ImageStorage(_) => (
+                "image_storage_error",
+                "The image could not be stored or read.",
+            ),
         };
         let mut error = serializer.serialize_struct("AppError", 2)?;
         error.serialize_field("code", code)?;

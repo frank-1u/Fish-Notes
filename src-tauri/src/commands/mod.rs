@@ -2,8 +2,10 @@ use tauri::State;
 
 use crate::AppError;
 
+mod images;
 mod notes;
 
+pub(crate) use images::*;
 pub(crate) use notes::*;
 
 async fn run_blocking<T: Send + 'static>(
