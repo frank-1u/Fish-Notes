@@ -2,11 +2,13 @@ use tauri::State;
 
 use crate::AppError;
 
+mod encryption;
 mod images;
 mod notes;
 mod search;
 mod tags;
 
+pub(crate) use encryption::*;
 pub(crate) use images::*;
 pub(crate) use notes::*;
 pub(crate) use search::*;

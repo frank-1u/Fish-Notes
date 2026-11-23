@@ -1,11 +1,15 @@
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::{Arc, RwLock},
+};
 
-use crate::{db, AppError};
+use crate::{crypto::SessionKey, db, AppError};
 
 #[derive(Clone)]
 pub struct AppService {
     pub(crate) database: db::Database,
     pub(crate) data_dir: PathBuf,
+    pub(crate) session_key: Arc<RwLock<Option<SessionKey>>>,
 }
 
 impl AppService {
@@ -13,6 +17,7 @@ impl AppService {
         Ok(Self {
             database: db::open(data_dir)?,
             data_dir: data_dir.to_path_buf(),
+            session_key: Arc::default(),
         })
     }
 }

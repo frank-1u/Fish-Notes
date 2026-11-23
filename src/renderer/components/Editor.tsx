@@ -41,6 +41,8 @@ function Editor({
     encryptionReady,
     lockNote,
     unlockNote,
+    refreshEncryptionState,
+    registerNoteEditFlush,
   } = useApp();
   const { resolvedTheme } = useTheme();
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -49,9 +51,8 @@ function Editor({
   const [titleCandidate, setTitleCandidate] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Decrypted content for locked notes
-  const [decryptedContent, setDecryptedContent] = useState<string | null>(null);
-  const [loadingDecrypted, setLoadingDecrypted] = useState(false);
+  const [decrypted, setDecrypted] = useState(false);
+  const [decryptError, setDecryptError] = useState<string | null>(null);
 
   const lastContentRef = useRef(content);
   const prevNoteIdRef = useRef(noteId);
@@ -59,31 +60,45 @@ function Editor({
     lastContentRef.current = content;
     prevNoteIdRef.current = noteId;
     setLocalTitle(title);
-    setDecryptedContent(null);
+    setDecrypted(false);
+    setDecryptError(null);
+    setShowExportMenu(false);
     setTitleCandidate(null);
   }
 
   // Fetch decrypted content when a locked note is opened and session is unlocked
   useEffect(() => {
-    if (!noteId || !isLocked || !sessionUnlocked) {
-      setDecryptedContent(null);
-      setLoadingDecrypted(false);
+    if (!noteId || !isLocked) return;
+    if (!sessionUnlocked) {
+      lastContentRef.current = '';
+      setDecrypted(false);
+      setDecryptError(null);
+      setShowExportMenu(false);
+      setTitleCandidate(null);
       return;
     }
     let cancelled = false;
-    setLoadingDecrypted(true);
-    api.notes.getDecrypted(noteId).then((note) => {
-      if (cancelled) return;
-      if (note) {
-        setDecryptedContent(note.content);
+    void api.notes
+      .getDecrypted(noteId)
+      .then((note) => {
+        if (cancelled) return;
         lastContentRef.current = note.content;
-      }
-      setLoadingDecrypted(false);
-    });
+        setDecrypted(true);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        const appError = parseAppError(error);
+        setDecryptError(appError.message);
+        if (appError.code === 'session_locked') {
+          void refreshEncryptionState().catch((error: unknown) =>
+            message.error(parseAppError(error).message),
+          );
+        }
+      });
     return () => {
       cancelled = true;
     };
-  }, [noteId, isLocked, sessionUnlocked]);
+  }, [noteId, isLocked, sessionUnlocked, refreshEncryptionState]);
 
   const flushPending = useCallback(() => {
     flush();
@@ -91,6 +106,7 @@ function Editor({
   }, [flush, flushTitle]);
 
   useEffect(() => flushPending, [noteId, flushPending]);
+  useEffect(() => registerNoteEditFlush(flushPending), [registerNoteEditFlush, flushPending]);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -150,9 +166,11 @@ function Editor({
     return () => document.removeEventListener('mousedown', handler);
   }, [showExportMenu]);
 
+  const canRead = !isLocked || (sessionUnlocked && decrypted);
   const handleExport = useCallback(
     async (format: 'markdown' | 'html' | 'pdf') => {
       setShowExportMenu(false);
+      if (!canRead) return;
       try {
         if (format === 'pdf') throw unavailable('PDF export');
         await api.export[format](localTitle, lastContentRef.current);
@@ -160,7 +178,7 @@ function Editor({
         message.error(parseAppError(error).message);
       }
     },
-    [localTitle],
+    [canRead, localTitle],
   );
 
   const handleVerify = useCallback(
@@ -181,7 +199,7 @@ function Editor({
 
   const handleSuggestTitle = useCallback(async () => {
     if (!noteId || suggestingTitle) return;
-    const source = isLocked && !decryptedContent ? '' : lastContentRef.current;
+    const source = canRead ? lastContentRef.current : '';
     if (!source.trim()) {
       message.warning(t('Note is empty'));
       return;
@@ -196,7 +214,7 @@ function Editor({
     } finally {
       setSuggestingTitle(false);
     }
-  }, [noteId, suggestingTitle, isLocked, decryptedContent, t]);
+  }, [noteId, suggestingTitle, canRead, t]);
 
   const handleAcceptTitle = useCallback(() => {
     if (!noteId || !titleCandidate) return;
@@ -212,8 +230,6 @@ function Editor({
 
   // Determine if we should show the password prompt
   const needsPassword = isLocked && !sessionUnlocked;
-  // Determine the effective content for the editor
-  const editorContent = isLocked && !decryptedContent ? '' : lastContentRef.current;
 
   return (
     <div
@@ -259,7 +275,7 @@ function Editor({
             )}
 
             {/* Export button */}
-            <div ref={menuRef} className="relative">
+            <div ref={menuRef} className="relative" hidden={!canRead}>
               <button
                 onClick={() => setShowExportMenu(!showExportMenu)}
                 className="p-1.5 rounded transition-colors hover:opacity-70"
@@ -296,12 +312,12 @@ function Editor({
       {noteId ? (
         needsPassword ? (
           <PasswordPrompt onVerify={handleVerify} />
-        ) : loadingDecrypted ? (
+        ) : !canRead ? (
           <div
             className="flex-1 flex items-center justify-center"
             style={{ color: 'var(--text-tertiary)' }}
           >
-            {t('Decrypting...')}
+            {decryptError || t('Decrypting...')}
           </div>
         ) : (
           <>
@@ -419,7 +435,7 @@ function Editor({
             {/* Row 3: Markdown editor */}
             <MarkdownEditor
               key={`${noteId}-${resolvedTheme}-${i18n.language}`}
-              defaultValue={editorContent}
+              defaultValue={lastContentRef.current}
               onChange={handleChange}
               onSave={flushPending}
             />

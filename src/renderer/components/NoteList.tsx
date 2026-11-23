@@ -179,11 +179,10 @@ function NoteList({ width, onResizeStart }: NoteListProps) {
     async (password: string) => {
       const ok = await verifyPassword(password);
       if (ok) {
+        const pendingAction = pendingActionRef.current;
+        pendingActionRef.current = null;
         setShowPasswordPrompt(false);
-        if (pendingActionRef.current) {
-          await pendingActionRef.current();
-          pendingActionRef.current = null;
-        }
+        await pendingAction?.();
       }
       return ok;
     },

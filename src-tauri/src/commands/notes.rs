@@ -61,3 +61,21 @@ pub(crate) async fn notes_toggle_pin(state: Service<'_>, id: String) -> Result<b
     let app = state.inner().clone();
     run_blocking(move || app.toggle_note_pin(&id)).await
 }
+
+#[tauri::command]
+pub(crate) async fn notes_lock(state: Service<'_>, id: String) -> Result<NoteSummary, AppError> {
+    let app = state.inner().clone();
+    run_blocking(move || app.lock_note(&id)).await
+}
+
+#[tauri::command]
+pub(crate) async fn notes_unlock(state: Service<'_>, id: String) -> Result<NoteSummary, AppError> {
+    let app = state.inner().clone();
+    run_blocking(move || app.unlock_note(&id)).await
+}
+
+#[tauri::command]
+pub(crate) async fn notes_get_decrypted(state: Service<'_>, id: String) -> Result<NoteData, AppError> {
+    let app = state.inner().clone();
+    run_blocking(move || app.get_decrypted_note(&id)).await
+}

@@ -1,4 +1,4 @@
-import { invokeCommand, unavailable } from './client';
+import { invokeCommand } from './client';
 
 export interface NoteSummary {
   id: string;
@@ -52,14 +52,10 @@ export const notes = {
     await Promise.allSettled(writes.values());
   },
 
-  // T3 implements the encrypted note operations.
-  async lock(_id: string): Promise<boolean> {
-    throw unavailable('Note encryption');
-  },
-  async unlock(_id: string): Promise<boolean> {
-    throw unavailable('Note encryption');
-  },
-  async getDecrypted(_id: string): Promise<NoteData | null> {
-    throw unavailable('Note encryption');
+  lock: (id: string) => writeNote(id, () => invokeCommand<NoteSummary>('notes_lock', { id })),
+  unlock: (id: string) => writeNote(id, () => invokeCommand<NoteSummary>('notes_unlock', { id })),
+  async getDecrypted(id: string): Promise<NoteData> {
+    await writes.get(id)?.catch(() => undefined);
+    return invokeCommand<NoteData>('notes_get_decrypted', { id });
   },
 };

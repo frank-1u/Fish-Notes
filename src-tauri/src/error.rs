@@ -13,6 +13,14 @@ pub enum AppError {
     InvalidTagRename,
     #[error("That tag name is already in use.")]
     TagNameTaken,
+    #[error("An encryption password is already set.")]
+    PasswordAlreadySet,
+    #[error("Enter a non-empty encryption password.")]
+    EmptyPassword,
+    #[error("Unlock the encryption session first.")]
+    SessionLocked,
+    #[error("The encryption operation failed.")]
+    Encryption,
     #[error("Background task failed: {0}")]
     BackgroundTask(#[from] tokio::task::JoinError),
     #[error("Database operation failed: {0}")]
@@ -48,6 +56,13 @@ impl Serialize for AppError {
                 "Rename the tag within its current parent.",
             ),
             Self::TagNameTaken => ("tag_name_taken", "That tag name is already in use."),
+            Self::PasswordAlreadySet => (
+                "password_already_set",
+                "An encryption password is already set.",
+            ),
+            Self::EmptyPassword => ("empty_password", "Enter a non-empty encryption password."),
+            Self::SessionLocked => ("session_locked", "Unlock the encryption session first."),
+            Self::Encryption => ("encryption_error", "The encryption operation failed."),
             Self::BackgroundTask(_) => ("background_task_error", "The background task failed."),
             Self::Sqlite(_) | Self::Pool(_) => ("database_error", "The database operation failed."),
             Self::DataDirectory(_) => {

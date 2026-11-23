@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { parseAppError } from '../api';
 
 interface PasswordPromptProps {
   onVerify: (password: string) => Promise<boolean>;
@@ -11,7 +12,7 @@ interface PasswordPromptProps {
 function PasswordPrompt({ onVerify, onCancel, message, buttonText }: PasswordPromptProps) {
   const { t } = useTranslation();
   const [password, setPassword] = useState('');
-  const [error, setError] = useState(false);
+  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = useCallback(
@@ -19,15 +20,19 @@ function PasswordPrompt({ onVerify, onCancel, message, buttonText }: PasswordPro
       e.preventDefault();
       if (!password || loading) return;
       setLoading(true);
-      setError(false);
-      const ok = await onVerify(password);
-      if (!ok) {
-        setError(true);
+      setError('');
+      try {
+        if (!(await onVerify(password))) {
+          setError(t('Wrong password. Please try again.'));
+        }
+      } catch (error) {
+        setError(parseAppError(error).message);
+      } finally {
         setPassword('');
+        setLoading(false);
       }
-      setLoading(false);
     },
-    [password, loading, onVerify],
+    [password, loading, onVerify, t],
   );
 
   return (
@@ -52,10 +57,11 @@ function PasswordPrompt({ onVerify, onCancel, message, buttonText }: PasswordPro
         </p>
         <input
           type="password"
+          disabled={loading}
           value={password}
           onChange={(e) => {
             setPassword(e.target.value);
-            setError(false);
+            setError('');
           }}
           placeholder={t('Enter password')}
           autoFocus
@@ -68,13 +74,14 @@ function PasswordPrompt({ onVerify, onCancel, message, buttonText }: PasswordPro
         />
         {error && (
           <p className="text-xs" style={{ color: '#ef4444' }}>
-            {t('Wrong password. Please try again.')}
+            {error}
           </p>
         )}
         <div className="flex gap-2 w-full">
           {onCancel && (
             <button
               type="button"
+              disabled={loading}
               onClick={onCancel}
               className="flex-1 px-3 py-1.5 rounded-lg text-sm transition-colors"
               style={{
