@@ -90,3 +90,9 @@ typings/
 
 # Electron-Forge
 out/
+
+# GitNexus index (local code-graph storage, 40MB+)
+/.gitnexus/
+
+# Personal agent-collaboration rules (per-machine, synced to worktrees via .worktree-copy-local)
+/docs/agents/collaboration.md

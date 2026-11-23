@@ -175,3 +175,22 @@ SQLite 文件位置: `~/Library/Application Support/Fish Notes/`(macOS)
 - 数据库操作全在 main 进程，renderer 不能直接访问
 - 图片存储在 userData 目录，通过自定义协议 `fish-image://` 在编辑器中显示
 - `turndown` 仍在依赖中，因为加密笔记的 legacy HTML→MD 转换需要它；待所有用户的旧加密笔记都被访问过一次后可考虑移除
+
+## Agent skills
+
+### Issue tracker
+
+Issues 跟踪在你自己的 GitHub 仓库 `frank-1u/Fish-Notes`（`gh` CLI，`gh repo set-default` 已固定解析）。见 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+默认五个 canonical roles，label 字符串与 role 同名。见 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+Single-context 布局：根目录 `GLOSSARY.md` + `docs/adr/`。见 `docs/agents/domain.md`。
+
+## Agent collaboration
+
+本项目启用 Agent 协作。处理任务前，读取 `docs/agents/collaboration.md`。
+所有 skill 的执行者、并发与委派方式遵循该规则；专业方法和交付要求遵循对应 skill。
