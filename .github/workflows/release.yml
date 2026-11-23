@@ -65,13 +65,12 @@ jobs:
           if ($installer.Count -ne 1) { throw "Expected one NSIS installer, found $($installer.Count)." }
           $portable = Get-Item "$releaseDir/fish-notes.exe"
           New-Item -ItemType Directory -Path release-assets | Out-Null
-          Copy-Item -LiteralPath $installer[0].FullName -Destination release-assets
+          $assetName = "Fish-Notes-${env:FISH_NOTES_VERSION}-windows-x64-setup.exe"
+          Copy-Item -LiteralPath $installer[0].FullName -Destination "release-assets/$assetName"
           $sigPath = "$($installer[0].FullName).sig"
           if (Test-Path -LiteralPath $sigPath) {
-            Copy-Item -LiteralPath $sigPath -Destination release-assets
+            Copy-Item -LiteralPath $sigPath -Destination "release-assets/$assetName.sig"
             $signature = (Get-Content -LiteralPath $sigPath -Raw).Trim()
-            $assetName = $installer[0].Name
-            $encodedName = [System.Uri]::EscapeDataString($assetName)
             $manifest = [ordered]@{
               version   = $env:FISH_NOTES_VERSION
               notes     = "Fish Notes v$($env:FISH_NOTES_VERSION)"
@@ -79,7 +78,7 @@ jobs:
               platforms = [ordered]@{
                 'windows-x86_64' = [ordered]@{
                   signature = $signature
-                  url       = "https://github.com/$($env:GITHUB_REPOSITORY)/releases/download/v$($env:FISH_NOTES_VERSION)/$encodedName"
+                  url       = "https://github.com/$($env:GITHUB_REPOSITORY)/releases/download/v$($env:FISH_NOTES_VERSION)/$assetName"
                 }
               }
             }
