@@ -13,6 +13,16 @@ pub enum AppError {
     Pool(#[from] r2d2::Error),
     #[error("Data directory could not be created: {0}")]
     DataDirectory(#[from] std::io::Error),
+    #[error("Unsupported file type.")]
+    ImportExtension,
+    #[error("File could not be read: {0}")]
+    ImportRead(std::io::Error),
+    #[error("HTML could not be converted to Markdown: {0}")]
+    ImportHtml(std::io::Error),
+    #[error("The selection is not a local file.")]
+    NonLocalFile,
+    #[error("The export could not be written: {0}")]
+    ExportWrite(std::io::Error),
     #[error("Unsupported image MIME type.")]
     UnsupportedImageType,
     #[error("Expected a raw image upload.")]
@@ -32,6 +42,11 @@ impl Serialize for AppError {
             Self::DataDirectory(_) => {
                 ("data_directory_error", "The data directory is unavailable.")
             }
+            Self::ImportExtension => ("import_extension_error", "Unsupported file type."),
+            Self::ImportRead(_) => ("import_read_error", "The file could not be read."),
+            Self::ImportHtml(_) => ("import_html_error", "The HTML file could not be converted."),
+            Self::NonLocalFile => ("non_local_file", "Select a local file."),
+            Self::ExportWrite(_) => ("export_write_error", "The export could not be written."),
             Self::UnsupportedImageType => ("unsupported_image_type", "Unsupported image type."),
             Self::InvalidImageUpload => ("invalid_image_upload", "Expected a raw image upload."),
             Self::InvalidImagePath => ("invalid_image_path", "Invalid image path."),

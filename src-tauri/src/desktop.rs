@@ -74,6 +74,10 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::images_save_from_buffer,
+            commands::import_files,
+            commands::export_markdown,
+            commands::export_html,
+            commands::export_image_data_url,
             commands::notes_create,
             commands::notes_list,
             commands::notes_get,

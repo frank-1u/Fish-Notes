@@ -3,9 +3,11 @@ use tauri::State;
 use crate::AppError;
 
 mod images;
+mod import_export;
 mod notes;
 
 pub(crate) use images::*;
+pub(crate) use import_export::*;
 pub(crate) use notes::*;
 
 async fn run_blocking<T: Send + 'static>(

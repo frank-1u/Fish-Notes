@@ -269,7 +269,7 @@ function NoteList({ width, onResizeStart }: NoteListProps) {
                   icon="M12 4v16m8-8H4"
                 />
                 <NewMenuItem
-                  label={importing ? t('Importing...') : t('Import (md / html)')}
+                  label={importing ? t('Importing...') : t('Import (md / txt / html)')}
                   onClick={handleImport}
                   disabled={importing}
                   icon="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M12 4v12m0 0l-4-4m4 4l4-4"

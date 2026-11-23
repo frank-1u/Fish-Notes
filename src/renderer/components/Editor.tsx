@@ -1,7 +1,7 @@
 import { isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { api, parseAppError } from '../api';
-import { unavailable } from '../api/client';
+import { printNote } from '../utils/printNote';
 import React, { useCallback, useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import MarkdownEditor from './editor/MarkdownEditor';
@@ -150,17 +150,25 @@ function Editor({
     return () => document.removeEventListener('mousedown', handler);
   }, [showExportMenu]);
 
+  const canExport =
+    !isLocked || (sessionUnlocked && !loadingDecrypted && decryptedContent !== null);
+
   const handleExport = useCallback(
     async (format: 'markdown' | 'html' | 'pdf') => {
       setShowExportMenu(false);
+      if (!noteId || !canExport) return;
+      const title = localTitle.trim() ? localTitle : t('Untitled');
       try {
-        if (format === 'pdf') throw unavailable('PDF export');
-        await api.export[format](localTitle, lastContentRef.current);
+        if (format === 'pdf') {
+          await printNote(title, lastContentRef.current);
+        } else {
+          await api.export[format](title, lastContentRef.current);
+        }
       } catch (error) {
         message.error(parseAppError(error).message);
       }
     },
-    [localTitle],
+    [noteId, canExport, localTitle, t],
   );
 
   const handleVerify = useCallback(
@@ -262,7 +270,8 @@ function Editor({
             <div ref={menuRef} className="relative">
               <button
                 onClick={() => setShowExportMenu(!showExportMenu)}
-                className="p-1.5 rounded transition-colors hover:opacity-70"
+                disabled={!canExport}
+                className="p-1.5 rounded transition-colors hover:opacity-70 disabled:opacity-50"
                 style={{ color: 'var(--text-tertiary)' }}
                 title={t('Export')}
               >
@@ -275,7 +284,7 @@ function Editor({
                   />
                 </svg>
               </button>
-              {showExportMenu && (
+              {showExportMenu && canExport && (
                 <div
                   className="absolute right-0 top-full mt-1 w-40 rounded-lg shadow-lg border py-1 z-50"
                   style={{
@@ -285,7 +294,10 @@ function Editor({
                 >
                   <ExportMenuItem label="Markdown (.md)" onClick={() => handleExport('markdown')} />
                   <ExportMenuItem label="HTML (.html)" onClick={() => handleExport('html')} />
-                  <ExportMenuItem label="PDF (.pdf)" onClick={() => handleExport('pdf')} />
+                  <ExportMenuItem
+                    label={t('Print / Save as PDF')}
+                    onClick={() => handleExport('pdf')}
+                  />
                 </div>
               )}
             </div>
