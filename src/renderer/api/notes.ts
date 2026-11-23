@@ -49,7 +49,22 @@ export const notes = {
   togglePin: (id: string) =>
     writeNote(id, () => invokeCommand<boolean>('notes_toggle_pin', { id })),
   async waitForWrites(): Promise<void> {
-    await Promise.allSettled(writes.values());
+    let firstError: unknown;
+    let hasError = false;
+    while (writes.size > 0) {
+      const snapshot = Array.from(writes.values());
+      const results = await Promise.allSettled(snapshot);
+      if (!hasError) {
+        const rejected = results.find(
+          (result): result is PromiseRejectedResult => result.status === 'rejected',
+        );
+        if (rejected) {
+          hasError = true;
+          firstError = rejected.reason;
+        }
+      }
+    }
+    if (hasError) throw firstError;
   },
 
   lock: (id: string) => writeNote(id, () => invokeCommand<NoteSummary>('notes_lock', { id })),

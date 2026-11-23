@@ -53,9 +53,9 @@ impl<'a> HttpProvider<'a> {
         } else {
             "application/json"
         };
-        let request = self.client.post(endpoint).header(ACCEPT, accept);
         let response = match config.protocol {
             AiProtocol::Openai => {
+                let request = self.client.post(endpoint).header(ACCEPT, accept);
                 let mut turns = vec![json!({ "role": "system", "content": system })];
                 turns.extend(messages.iter().map(|message| json!(message)));
                 request
@@ -65,29 +65,64 @@ impl<'a> HttpProvider<'a> {
                     .await
             }
             AiProtocol::Anthropic => {
-                let body = json!({
-                    "model": config.model,
-                    "stream": stream,
-                    "system": system,
-                    "messages": messages,
-                    "max_tokens": 4096,
-                });
-                let request = request
-                    .header("anthropic-version", "2023-06-01")
-                    .json(&body);
-                let response = request
-                    .try_clone()
-                    .expect("JSON request body is cloneable")
-                    .header("x-api-key", &config.api_key)
-                    .send()
-                    .await;
-                if response.as_ref().is_ok_and(|r| {
-                    matches!(r.status(), StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN)
-                }) {
-                    drop(response);
-                    request.bearer_auth(&config.api_key).send().await
+                let send_anthropic = |with_thinking: bool| {
+                    let body = if with_thinking {
+                        json!({
+                            "model": config.model,
+                            "stream": stream,
+                            "system": system,
+                            "messages": messages,
+                            "max_tokens": 8192,
+                            "thinking": {
+                                "type": "enabled",
+                                "budget_tokens": 4096,
+                            },
+                        })
+                    } else {
+                        json!({
+                            "model": config.model,
+                            "stream": stream,
+                            "system": system,
+                            "messages": messages,
+                            "max_tokens": 4096,
+                        })
+                    };
+                    let req = self
+                        .client
+                        .post(endpoint.clone())
+                        .header(ACCEPT, accept)
+                        .header("anthropic-version", "2023-06-01")
+                        .json(&body);
+                    async move {
+                        let response = req
+                            .try_clone()
+                            .expect("JSON request body is cloneable")
+                            .header("x-api-key", &config.api_key)
+                            .send()
+                            .await;
+                        if response.as_ref().is_ok_and(|r| {
+                            matches!(r.status(), StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN)
+                        }) {
+                            drop(response);
+                            req.bearer_auth(&config.api_key).send().await
+                        } else {
+                            response
+                        }
+                    }
+                };
+                if stream {
+                    let response = send_anthropic(true).await;
+                    if response
+                        .as_ref()
+                        .is_ok_and(|r| r.status() == StatusCode::BAD_REQUEST)
+                    {
+                        drop(response);
+                        send_anthropic(false).await
+                    } else {
+                        response
+                    }
                 } else {
-                    response
+                    send_anthropic(false).await
                 }
             }
         }

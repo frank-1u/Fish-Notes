@@ -69,7 +69,13 @@ impl AiConfig {
 
     fn keep_saved_key(&mut self, conn: &Connection) -> Result<(), AppError> {
         if self.api_key.trim().is_empty() {
-            self.api_key = read_config(conn)?.map_or_else(String::new, |saved| saved.api_key);
+            if let Some(saved) = read_config(conn)? {
+                let same_target = saved.protocol == self.protocol
+                    && saved.endpoint().ok() == self.endpoint().ok();
+                if same_target {
+                    self.api_key = saved.api_key;
+                }
+            }
         }
         Ok(())
     }

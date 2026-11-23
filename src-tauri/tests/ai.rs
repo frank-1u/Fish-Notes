@@ -161,23 +161,29 @@ fn chat_request() -> ChatRequest {
 async fn openai_completion_uses_unsaved_form_and_saved_key() {
     let data = tempdir().unwrap();
     let app = AppService::open(data.path()).unwrap();
-    app.set_ai_config(config(AiProtocol::Openai, "http://localhost".into()))
-        .unwrap();
-    app.set_ai_config(AiConfig {
-        api_key: String::new(),
-        ..config(AiProtocol::Openai, "http://localhost".into())
-    })
-    .unwrap();
     let (url, server) = mock_server(
         r#"{"choices":[{"message":{"content":"OK"}}]}"#,
         "application/json",
         false,
     )
     .await;
+    let base_url = format!("{url}/gateway/v1/");
+    app.set_ai_config(config(AiProtocol::Openai, base_url.clone()))
+        .unwrap();
+    // Changing to a different endpoint with an empty key must not reuse the saved key.
+    assert!(app
+        .test_ai_connection(Some(AiConfig {
+            api_key: String::new(),
+            ..config(AiProtocol::Openai, "http://127.0.0.1:9/other/v1".into())
+        }))
+        .await
+        .is_err());
+
     let result = app
         .test_ai_connection(Some(AiConfig {
             api_key: String::new(),
-            ..config(AiProtocol::Openai, format!("{url}/gateway/v1/"))
+            model: "group/unsaved-model".into(),
+            ..config(AiProtocol::Openai, base_url.clone())
         }))
         .await
         .unwrap();
@@ -187,11 +193,11 @@ async fn openai_completion_uses_unsaved_form_and_saved_key() {
     assert!(headers
         .to_ascii_lowercase()
         .contains("authorization: bearer mock-key"));
-    assert_eq!(body["model"], "group/demo");
+    assert_eq!(body["model"], "group/unsaved-model");
     assert_eq!(body["stream"], false);
     assert_eq!(
-        app.get_ai_config().unwrap().unwrap().base_url,
-        "http://localhost"
+        app.get_ai_config().unwrap().unwrap().model,
+        "group/demo"
     );
 }
 
@@ -307,8 +313,62 @@ async fn both_protocols_stream_reasoning_and_text_and_can_cancel() {
             let (_, body) = server.await.unwrap();
             assert_eq!(body["stream"], true);
             assert!(body.to_string().contains("单篇笔记"));
+            if protocol == AiProtocol::Anthropic {
+                assert_eq!(body["thinking"]["type"], "enabled");
+                assert!(body["max_tokens"].as_u64().unwrap() > body["thinking"]["budget_tokens"].as_u64().unwrap());
+            }
         }
     }
+}
+
+#[tokio::test]
+async fn anthropic_stream_falls_back_when_thinking_is_rejected() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}/v1", listener.local_addr().unwrap());
+    let server = tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let (_, body1) = read_request(&mut socket).await;
+        assert_eq!(body1["thinking"]["type"], "enabled");
+        socket
+            .write_all(
+                b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            )
+            .await
+            .unwrap();
+
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let (_, body2) = read_request(&mut socket).await;
+        assert!(body2.get("thinking").is_none());
+        let sse = "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"回退成功\"}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n";
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{sse}",
+            sse.len()
+        );
+        socket.write_all(response.as_bytes()).await.unwrap();
+    });
+
+    let data = tempdir().unwrap();
+    let app = AppService::open(data.path()).unwrap();
+    app.set_ai_config(config(AiProtocol::Anthropic, url)).unwrap();
+    let mut events = Vec::new();
+    timeout(
+        Duration::from_secs(3),
+        app.stream_chat(chat_request(), |event| {
+            events.push(event);
+            Ok(())
+        }),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(
+        events.last(),
+        Some(&ChatStreamEvent::Done {
+            full_text: "回退成功".into(),
+            cancelled: false
+        })
+    );
+    server.await.unwrap();
 }
 
 #[tokio::test]
