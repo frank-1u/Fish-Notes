@@ -1,8 +1,11 @@
-import type { NoteSummary } from './notes';
+import { invokeCommand } from './client';
 
-// T2 will add match snippets and relevance ordering.
+export interface SearchResult {
+  id: string;
+  title: string;
+  snippet: { text: string; matched: boolean }[];
+}
+
 export const search = {
-  async notes(_query: string): Promise<NoteSummary[]> {
-    return [];
-  },
+  notes: (query: string) => invokeCommand<SearchResult[]>('search_notes', { query }),
 };

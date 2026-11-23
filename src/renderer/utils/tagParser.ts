@@ -60,10 +60,7 @@ export function buildTagTree(tags: TagData[]): TagTreeNode[] {
   const roots: TagTreeNode[] = [];
   const nodeMap = new Map<string, TagTreeNode>();
 
-  // Sort so parents come before children
-  const sorted = [...tags].sort((a, b) => a.name.localeCompare(b.name));
-
-  for (const tag of sorted) {
+  for (const tag of tags) {
     const parts = tag.name.split('/');
     const node: TagTreeNode = {
       id: tag.id,
@@ -74,17 +71,18 @@ export function buildTagTree(tags: TagData[]): TagTreeNode[] {
       sortOrder: tag.sortOrder,
       children: [],
     };
-    nodeMap.set(tag.name, node);
+    nodeMap.set(tag.id, node);
+  }
 
-    if (parts.length > 1) {
-      const parentName = parts.slice(0, -1).join('/');
-      const parent = nodeMap.get(parentName);
-      if (parent) {
-        parent.children.push(node);
-        continue;
-      }
+  for (const tag of tags) {
+    const node = nodeMap.get(tag.id);
+    if (!node) continue;
+    const parent = tag.parentId ? nodeMap.get(tag.parentId) : undefined;
+    if (parent) {
+      parent.children.push(node);
+    } else {
+      roots.push(node);
     }
-    roots.push(node);
   }
 
   sortSiblings(roots);

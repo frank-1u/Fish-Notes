@@ -3,8 +3,12 @@ use tauri::State;
 use crate::AppError;
 
 mod notes;
+mod search;
+mod tags;
 
 pub(crate) use notes::*;
+pub(crate) use search::*;
+pub(crate) use tags::*;
 
 async fn run_blocking<T: Send + 'static>(
     operation: impl FnOnce() -> Result<T, AppError> + Send + 'static,

@@ -24,4 +24,5 @@ export type { AIConfig, PublicAIConfig } from './ai';
 export type { ChatData, ChatMessage, ChatMessageData } from './chats';
 export type { ImportResult } from './import-export';
 export type { NoteData, NoteSummary, NoteUpdate } from './notes';
+export type { SearchResult } from './search';
 export type { TagData } from './tags';
