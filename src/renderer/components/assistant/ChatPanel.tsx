@@ -61,22 +61,7 @@ function ThinkingBlock({ msg }: { msg: UiMessage }) {
     if (live && bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
   }, [live, msg.thinking]);
 
-  const tokens = msg.thinkingTokens ?? 0;
-  const hasText = !!msg.thinking?.trim();
-  if (!hasText && !tokens) return null;
-
-  // some models (e.g. Opus 4.8 via CLI) redact thinking text and only report token
-  // counts — show a live "thinking" indicator instead of an expandable transcript
-  if (!hasText) {
-    return (
-      <div
-        className={live ? 'fn-pulse' : undefined}
-        style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 6 }}
-      >
-        {live ? t('Thinking…') : t('Thought for a while')} · ~{tokens} tokens
-      </div>
-    );
-  }
+  if (!msg.thinking?.trim()) return null;
 
   const open = live || expanded;
   return (
@@ -533,10 +518,17 @@ export default function ChatPanel() {
           chats={chats}
           currentChatId={activeTab?.chatId ?? null}
           onSelect={(id) => {
-            selectChat(id);
-            setShowHistory(false);
+            void selectChat(id)
+              .then(() => setShowHistory(false))
+              .catch((error: unknown) => {
+                message.error(parseAppError(error).message);
+              });
           }}
-          onDelete={deleteChat}
+          onDelete={(id) => {
+            void deleteChat(id).catch((error: unknown) =>
+              message.error(parseAppError(error).message),
+            );
+          }}
         />
       ) : !activeTab ? (
         <NoTabState onNew={newTab} />

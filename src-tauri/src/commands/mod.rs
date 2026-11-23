@@ -2,8 +2,12 @@ use tauri::State;
 
 use crate::AppError;
 
+mod ai;
+mod chats;
 mod notes;
 
+pub(crate) use ai::*;
+pub(crate) use chats::*;
 pub(crate) use notes::*;
 
 async fn run_blocking<T: Send + 'static>(

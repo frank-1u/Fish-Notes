@@ -1,4 +1,4 @@
-import { api, type ChatData } from '../api';
+import { api, parseAppError, type ChatData } from '../api';
 import {
   createContext,
   useContext,
@@ -24,8 +24,6 @@ export interface UiMessage {
   content: string;
   /** live extended-thinking text (display only, not persisted) */
   thinking?: string;
-  /** approx. thinking tokens — some models redact thinking text and only report counts */
-  thinkingTokens?: number;
   /** notes retrieved for a knowledge-base answer (display only, not persisted) */
   sources?: { id: string; title: string }[];
   streaming?: boolean;
@@ -103,16 +101,24 @@ function freshTab(boundNote: BoundNote | null = null): Tab {
 }
 
 interface StreamEntry {
-  tabKey: string;
-  chatId: string;
-  assistantId: string;
-  /** full text received from the model so far */
-  acc: string;
-  /** how many chars of `acc` are currently shown (typewriter smoothing) */
-  revealed: number;
-  /** stream finished; reveal loop drains the backlog then cleans up */
-  done?: boolean;
+  chatId: string | null;
+  cancelled: boolean;
+  discard: boolean;
+  stop?: () => Promise<void>;
   timer?: number;
+}
+
+function reportError(error: unknown) {
+  message.error(parseAppError(error).message);
+}
+
+function stopStream(stream?: StreamEntry) {
+  if (!stream || stream.cancelled) return;
+  stream.cancelled = true;
+  void stream.stop?.().catch((error: unknown) => {
+    stream.cancelled = false;
+    reportError(error);
+  });
 }
 
 export function AssistantProvider({ children }: { children: ReactNode }) {
@@ -126,13 +132,15 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const [chats, setChats] = useState<ChatData[]>([]);
   const [prefill, setPrefill] = useState<string>('');
 
-  // refs for synchronous reads inside IPC listeners / send
+  // Keep the current tab available to callbacks across asynchronous requests.
   const tabsRef = useRef<Tab[]>(tabs);
   tabsRef.current = tabs;
   const activeKeyRef = useRef<string>(activeKey);
   activeKeyRef.current = activeKey;
-  // requestId -> live stream bookkeeping (synchronous, race-free)
+  // Reserve a tab before the first IPC call so concurrent sends cannot share its history.
   const streams = useRef<Map<string, StreamEntry>>(new Map());
+
+  const deletingChats = useRef(new Set<string>());
 
   const activeTab = tabs.find((tb) => tb.key === activeKey) ?? null;
 
@@ -141,128 +149,30 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     setTabs((prev) => prev.map((tb) => (tb.key === key ? patch(tb) : tb)));
   }, []);
 
-  useEffect(() => {
-    api.chats.list().then(setChats);
+  const chatListRevision = useRef(0);
+  const refreshChats = useCallback(async () => {
+    const revision = ++chatListRevision.current;
+    try {
+      const history = await api.chats.list();
+      if (chatListRevision.current === revision) setChats(history);
+    } catch (error) {
+      if (chatListRevision.current === revision) reportError(error);
+    }
   }, []);
 
-  // global stream listeners (route by requestId via the streams map)
   useEffect(() => {
-    // Typewriter smoothing: the CLI delivers ~0.5s bursts of 10–30 chars. Instead of
-    // pasting each burst, buffer into `acc` and reveal a few chars per tick — the
-    // backlog-proportional step keeps latency bounded while looking smooth.
-    const REVEAL_MS = 24;
-    const startReveal = (requestId: string) => {
-      const entry = streams.current.get(requestId);
-      if (!entry || entry.timer != null) return;
-      entry.timer = window.setInterval(() => {
-        const cur = streams.current.get(requestId);
-        if (!cur) return;
-        const backlog = cur.acc.length - cur.revealed;
-        if (backlog > 0) {
-          cur.revealed = Math.min(
-            cur.acc.length,
-            cur.revealed + Math.max(1, Math.ceil(backlog / 24)),
-          );
-          const shown = cur.acc.slice(0, cur.revealed);
-          patchTab(cur.tabKey, (tb) => ({
-            ...tb,
-            messages: tb.messages.map((m) =>
-              m.id === cur.assistantId ? { ...m, content: shown } : m,
-            ),
-          }));
-        } else if (cur.done) {
-          if (cur.timer != null) window.clearInterval(cur.timer);
-          streams.current.delete(requestId);
-          const content = cur.acc.trim();
-          patchTab(cur.tabKey, (tb) => ({
-            ...tb,
-            isStreaming: false,
-            messages: tb.messages
-              .map((m) => (m.id === cur.assistantId ? { ...m, content, streaming: false } : m))
-              .filter((m) => !(m.id === cur.assistantId && !content)),
-          }));
-        }
-      }, REVEAL_MS);
-    };
-
-    const offChunk = api.ai.onChatChunk(({ requestId, delta }) => {
-      const s = streams.current.get(requestId);
-      if (!s) return;
-      s.acc += delta;
-      startReveal(requestId);
-    });
-
-    const offSources = api.ai.onChatSources(({ requestId, sources }) => {
-      const s = streams.current.get(requestId);
-      if (!s) return;
-      patchTab(s.tabKey, (tb) => ({
-        ...tb,
-        messages: tb.messages.map((m) => (m.id === s.assistantId ? { ...m, sources } : m)),
-      }));
-    });
-
-    const offThinking = api.ai.onChatThinking(({ requestId, delta, tokens }) => {
-      const s = streams.current.get(requestId);
-      if (!s) return;
-      patchTab(s.tabKey, (tb) => ({
-        ...tb,
-        messages: tb.messages.map((m) =>
-          m.id === s.assistantId
-            ? {
-                ...m,
-                thinking: (m.thinking ?? '') + delta,
-                thinkingTokens: (m.thinkingTokens ?? 0) + (tokens ?? 0),
-              }
-            : m,
-        ),
-      }));
-    });
-
-    // persistence happens OUTSIDE the setState updater (StrictMode double-invokes
-    // updaters; that previously duplicated DB rows).
-    const finalize = (requestId: string, fullText?: string) => {
-      const s = streams.current.get(requestId);
-      if (!s) return;
-      // fallback path (no partial events): the result carries the whole text
-      if (fullText && fullText.trim().length > s.acc.trim().length) s.acc = fullText;
-      s.done = true;
-      const content = s.acc.trim();
-      if (content) api.chats.addMessage(s.chatId, 'assistant', content);
-      // let the reveal loop drain the backlog, then it cleans up UI state
-      startReveal(requestId);
-    };
-
-    const offDone = api.ai.onChatDone(({ requestId, fullText }) =>
-      finalize(requestId, fullText || undefined),
-    );
-    const offError = api.ai.onChatError(({ requestId, message: msg }) => {
-      const s = streams.current.get(requestId);
-      if (!s) return;
-      if (s.timer != null) window.clearInterval(s.timer);
-      streams.current.delete(requestId);
-      const content = s.acc.trim();
-      patchTab(s.tabKey, (tb) => ({
-        ...tb,
-        isStreaming: false,
-        messages: tb.messages
-          .map((m) => (m.id === s.assistantId ? { ...m, content, streaming: false } : m))
-          .filter((m) => !(m.id === s.assistantId && !content)),
-      }));
-      message.error(msg);
-    });
-
-    const streamsAtMount = streams.current;
+    void refreshChats();
+    const entries = streams.current;
     return () => {
-      offChunk();
-      offSources();
-      offThinking();
-      offDone();
-      offError();
-      for (const s of streamsAtMount.values()) {
-        if (s.timer != null) window.clearInterval(s.timer);
+      chatListRevision.current += 1;
+      for (const entry of entries.values()) {
+        entry.discard = true;
+        if (entry.timer != null) window.clearInterval(entry.timer);
+        stopStream(entry);
       }
+      entries.clear();
     };
-  }, [patchTab]);
+  }, [refreshChats]);
 
   const open = useCallback(() => setIsOpen(true), []);
   const close = useCallback(() => setIsOpen(false), []);
@@ -279,6 +189,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const selectTab = useCallback((key: string) => setActiveKey(key), []);
 
   const closeTab = useCallback((key: string) => {
+    stopStream(streams.current.get(key));
     setTabs((prev) => {
       const idx = prev.findIndex((tb) => tb.key === key);
       if (idx === -1) return prev;
@@ -299,96 +210,144 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       const trimmed = text.trim();
       const key = activeKeyRef.current;
       const tab = tabsRef.current.find((tb) => tb.key === key);
-      if (!trimmed || !tab || tab.isStreaming) return;
+      if (
+        !trimmed ||
+        !tab ||
+        streams.current.has(key) ||
+        (tab.chatId && deletingChats.current.has(tab.chatId))
+      )
+        return;
 
-      // ensure a persisted chat exists for this tab
-      let chatId = tab.chatId;
-      if (!chatId) {
-        const chat = await api.chats.create(trimmed.slice(0, 24));
-        chatId = chat.id;
-        patchTab(key, (tb) => ({ ...tb, chatId: chat.id, title: chat.title }));
-        setChats((prev) => [chat, ...prev]);
-      } else if (!tab.title) {
-        patchTab(key, (tb) => ({ ...tb, title: trimmed.slice(0, 24) }));
-      }
+      const entry: StreamEntry = { chatId: tab.chatId, cancelled: false, discard: false };
+      streams.current.set(key, entry);
+      patchTab(key, (tb) => ({ ...tb, isStreaming: true }));
 
-      // resolve bound-note context
-      let noteContext: string | undefined;
-      let noteId: string | null = null;
-      if (tab.boundNote) {
-        const bound = tab.boundNote;
-        const note = await api.notes.get(bound.id);
-        noteId = bound.id;
-        if (note?.isLocked) {
-          const dec = await api.notes.getDecrypted(note.id);
-          noteContext = dec?.content || undefined;
-        } else {
-          noteContext = note?.content || undefined;
+      const assistantId = genId();
+      let accumulated = '';
+      let revealed = 0;
+      const updateAssistant = (patch: (msg: UiMessage) => UiMessage) => {
+        if (entry.discard) return;
+        patchTab(key, (tb) => ({
+          ...tb,
+          messages: tb.messages.map((msg) => (msg.id === assistantId ? patch(msg) : msg)),
+        }));
+      };
+
+      try {
+        let noteContext: string | undefined;
+        const noteId = tab.boundNote?.id;
+        if (noteId) {
+          const note = await api.notes.get(noteId);
+          noteContext = note?.isLocked
+            ? (await api.notes.getDecrypted(noteId))?.content
+            : note?.content;
+          if (!noteContext?.trim()) {
+            message.warning(
+              note?.isLocked
+                ? t('Unlock this note first to ask about it')
+                : t('This note is empty'),
+            );
+            return;
+          }
         }
-        if (!noteContext) {
-          message.warning(
-            note?.isLocked ? t('Unlock this note first to ask about it') : t('This note is empty'),
-          );
-          return;
+        if (entry.cancelled) return;
+
+        const title = Array.from(trimmed).slice(0, 24).join('');
+        let chatId = entry.chatId;
+        if (!chatId) {
+          const chat = await api.chats.create(title);
+          entry.chatId = chatId = chat.id;
+          patchTab(key, (tb) => ({ ...tb, chatId: chat.id, title: chat.title }));
+          void refreshChats();
+        }
+        if (entry.cancelled) return;
+
+        const userMessage = await api.chats.addMessage(chatId, 'user', trimmed, noteId);
+        if (entry.discard) return;
+        patchTab(key, (tb) => ({
+          ...tb,
+          title: tb.title || title,
+          messages: [
+            ...tb.messages,
+            userMessage,
+            { id: assistantId, role: 'assistant', content: '', streaming: true },
+          ],
+        }));
+        setPrefill('');
+        void refreshChats();
+        if (entry.cancelled) return;
+
+        const messages = [...tab.messages, userMessage].map(({ role, content }) => ({
+          role,
+          content,
+        }));
+        const stream = api.ai.chatStream(
+          {
+            requestId: genId(),
+            messages,
+            noteContext,
+            scope: !tab.boundNote && tab.useKb ? 'notes' : undefined,
+          },
+          (event) => {
+            if (entry.discard) return;
+            switch (event.type) {
+              case 'chunk':
+                accumulated += event.delta;
+                entry.timer ??= window.setInterval(() => {
+                  const backlog = accumulated.length - revealed;
+                  if (backlog === 0) return;
+                  revealed += Math.max(1, Math.ceil(backlog / 24));
+                  const content = accumulated.slice(0, revealed);
+                  updateAssistant((msg) => ({ ...msg, content }));
+                }, 24);
+                break;
+              case 'thinking':
+                updateAssistant((msg) => ({
+                  ...msg,
+                  thinking: (msg.thinking ?? '') + event.delta,
+                }));
+                break;
+              case 'sources':
+                updateAssistant((msg) => ({ ...msg, sources: event.sources }));
+                break;
+            }
+          },
+        );
+        entry.stop = stream.abort;
+        try {
+          accumulated = (await stream.result).fullText;
+        } finally {
+          if (entry.timer != null) window.clearInterval(entry.timer);
+          if (!entry.discard && accumulated.trim()) {
+            try {
+              await api.chats.addMessage(chatId, 'assistant', accumulated.trim());
+              void refreshChats();
+            } catch (error) {
+              if (!entry.discard) throw error;
+            }
+          }
+        }
+      } finally {
+        if (streams.current.get(key) === entry) {
+          streams.current.delete(key);
+          const content = accumulated.trim();
+          patchTab(key, (tb) => ({
+            ...tb,
+            isStreaming: false,
+            messages: tb.messages.flatMap((msg) => {
+              if (msg.id !== assistantId) return [msg];
+              return content ? [{ ...msg, streaming: false, content }] : [];
+            }),
+          }));
         }
       }
-
-      const userMsg: UiMessage = { id: genId(), role: 'user', content: trimmed, noteId };
-      const assistantMsg: UiMessage = { id: genId(), role: 'assistant', content: '', streaming: true };
-      const history = [...tab.messages, userMsg].map((m) => ({ role: m.role, content: m.content }));
-
-      patchTab(key, (tb) => ({
-        ...tb,
-        isStreaming: true,
-        messages: [...tb.messages, userMsg, assistantMsg],
-      }));
-      setPrefill('');
-
-      await api.chats.addMessage(chatId, 'user', trimmed, noteId);
-      api.chats.list().then(setChats);
-
-      const requestId = genId();
-      streams.current.set(requestId, {
-        tabKey: key,
-        chatId,
-        assistantId: assistantMsg.id,
-        acc: '',
-        revealed: 0,
-      });
-      api.ai.chatStream({
-        requestId,
-        messages: history,
-        noteContext,
-        scope: !tab.boundNote && tab.useKb ? 'notes' : undefined,
-      });
     },
-    [patchTab, t],
+    [patchTab, refreshChats, t],
   );
 
   const abort = useCallback(() => {
-    const key = activeKeyRef.current;
-    let entry: [string, StreamEntry] | undefined;
-    for (const e of streams.current.entries()) {
-      if (e[1].tabKey === key) {
-        entry = e;
-        break;
-      }
-    }
-    if (!entry) return;
-    const [requestId, s] = entry;
-    api.ai.abortChat(requestId);
-    if (s.timer != null) window.clearInterval(s.timer);
-    streams.current.delete(requestId);
-    const content = s.acc.trim();
-    if (content) api.chats.addMessage(s.chatId, 'assistant', content);
-    patchTab(key, (tb) => ({
-      ...tb,
-      isStreaming: false,
-      messages: tb.messages
-        .map((m) => (m.id === s.assistantId ? { ...m, content, streaming: false } : m))
-        .filter((m) => !(m.id === s.assistantId && !content)),
-    }));
-  }, [patchTab]);
+    stopStream(streams.current.get(activeKeyRef.current));
+  }, []);
 
   const detachNote = useCallback(() => {
     patchTab(activeKeyRef.current, (tb) => ({ ...tb, boundNote: null }));
@@ -433,32 +392,27 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ---- history ----
+  const historySelection = useRef(0);
+
   const selectChat = useCallback(
     async (id: string) => {
-      // focus an already-open tab if present
+      if (deletingChats.current.has(id)) return;
+      const selection = ++historySelection.current;
       const existing = tabsRef.current.find((tb) => tb.chatId === id);
       if (existing) {
         setActiveKey(existing.key);
         return;
       }
       const msgs = await api.chats.getMessages(id);
+      if (historySelection.current !== selection) return;
       const boundId = msgs.find((m) => m.noteId)?.noteId;
-      let boundNote: BoundNote | null = null;
-      if (boundId) {
-        const note = state.notes.find((n) => n.id === boundId);
-        boundNote = note ? { id: note.id, title: note.title || t('Untitled') } : null;
-      }
+      const note = state.notes.find((n) => n.id === boundId);
       const tab: Tab = {
         key: genId(),
         chatId: id,
         title: chats.find((c) => c.id === id)?.title || '',
-        boundNote,
-        messages: msgs.map((m) => ({
-          id: m.id,
-          role: m.role,
-          content: m.content,
-          noteId: m.noteId,
-        })),
+        boundNote: note ? { id: note.id, title: note.title || t('Untitled') } : null,
+        messages: msgs,
         isStreaming: false,
         useKb: false,
       };
@@ -470,20 +424,32 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
   const deleteChat = useCallback(
     async (id: string) => {
-      await api.chats.delete(id);
-      setChats((prev) => prev.filter((c) => c.id !== id));
-      // close any open tab backed by this chat
-      setTabs((prev) => {
-        const next = prev.filter((tb) => tb.chatId !== id);
-        if (next.length === 0) {
-          setActiveKey('');
-          return [];
+      if (deletingChats.current.has(id)) return;
+      deletingChats.current.add(id);
+      historySelection.current += 1;
+      for (const entry of streams.current.values()) {
+        if (entry.chatId === id) {
+          entry.discard = true;
+          stopStream(entry);
         }
-        setActiveKey((cur) => (prev.find((tb) => tb.chatId === id)?.key === cur ? next[0].key : cur));
-        return next;
-      });
+      }
+      try {
+        await api.chats.delete(id);
+      } catch (error) {
+        for (const entry of streams.current.values()) {
+          if (entry.chatId === id) entry.discard = false;
+        }
+        throw error;
+      } finally {
+        deletingChats.current.delete(id);
+      }
+      void refreshChats();
+      const removedKey = tabsRef.current.find((tb) => tb.chatId === id)?.key;
+      const nextKey = tabsRef.current.find((tb) => tb.chatId !== id)?.key ?? '';
+      setTabs((prev) => prev.filter((tb) => tb.chatId !== id));
+      setActiveKey((key) => (key === removedKey ? nextKey : key));
     },
-    [],
+    [refreshChats],
   );
 
   const clearPrefill = useCallback(() => setPrefill(''), []);

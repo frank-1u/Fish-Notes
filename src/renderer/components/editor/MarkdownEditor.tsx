@@ -10,6 +10,7 @@ import PolishDialog from './PolishDialog';
 import type { AppTheme } from './extensions/themes';
 import { useAssistant } from '../../contexts/AssistantContext';
 import { RobotIcon } from '../icons';
+import { message } from '../message';
 
 export type EditorMode = 'source' | 'preview' | 'split';
 
@@ -145,20 +146,29 @@ export default function MarkdownEditor({
   }, [polishSel]);
 
   const runPolish = useCallback(async (info: { from: number; to: number; text: string }) => {
-    setPolishDialog({
+    const request = {
       from: info.from,
       to: info.to,
       original: info.text,
       polished: null,
       loading: true,
       error: null,
-    });
+    };
+    setPolishDialog(request);
     try {
       const polished = await api.ai.polishText(info.text);
-      setPolishDialog((d) => (d ? { ...d, polished, loading: false } : d));
-    } catch (e) {
-      setPolishDialog((d) =>
-        d ? { ...d, loading: false, error: e instanceof Error ? e.message : String(e) } : d,
+      setPolishDialog((current) =>
+        current === request ? { ...request, polished, loading: false } : current,
+      );
+    } catch (error) {
+      setPolishDialog((current) =>
+        current === request
+          ? {
+              ...request,
+              loading: false,
+              error: error instanceof Error ? error.message : String(error),
+            }
+          : current,
       );
     }
   }, []);
@@ -179,6 +189,14 @@ export default function MarkdownEditor({
         setPolishDialog(null);
         return;
       }
+      if (
+        dialog.to > view.state.doc.length ||
+        view.state.sliceDoc(dialog.from, dialog.to) !== dialog.original
+      ) {
+        message.warning(t('The selected text changed. Select it again to polish it.'));
+        setPolishDialog(null);
+        return;
+      }
       // Replace the original range with polished text.
       view.dispatch({
         changes: { from: dialog.from, to: dialog.to, insert: polishedText },
@@ -187,7 +205,7 @@ export default function MarkdownEditor({
       view.focus();
       setPolishDialog(null);
     },
-    [polishDialog],
+    [polishDialog, t],
   );
 
   const handleRetryPolish = useCallback(() => {

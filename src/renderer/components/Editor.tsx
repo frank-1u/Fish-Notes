@@ -48,6 +48,7 @@ function Editor({
   const [suggestingTitle, setSuggestingTitle] = useState(false);
   const [titleCandidate, setTitleCandidate] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const titleRequest = useRef(0);
 
   // Decrypted content for locked notes
   const [decryptedContent, setDecryptedContent] = useState<string | null>(null);
@@ -60,6 +61,8 @@ function Editor({
     prevNoteIdRef.current = noteId;
     setLocalTitle(title);
     setDecryptedContent(null);
+    titleRequest.current += 1;
+    setSuggestingTitle(false);
     setTitleCandidate(null);
   }
 
@@ -186,15 +189,17 @@ function Editor({
       message.warning(t('Note is empty'));
       return;
     }
+    const request = ++titleRequest.current;
     setSuggestingTitle(true);
     setTitleCandidate(null);
     try {
       const suggested = await api.ai.suggestTitle(source);
-      if (suggested) setTitleCandidate(suggested);
+      if (titleRequest.current === request) setTitleCandidate(suggested);
     } catch (e) {
-      message.error(e instanceof Error ? e.message : String(e));
+      if (titleRequest.current === request)
+        message.error(e instanceof Error ? e.message : String(e));
     } finally {
-      setSuggestingTitle(false);
+      if (titleRequest.current === request) setSuggestingTitle(false);
     }
   }, [noteId, suggestingTitle, isLocked, decryptedContent, t]);
 
