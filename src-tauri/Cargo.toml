@@ -1,0 +1,58 @@
+[package]
+name = "fish-notes"
+version = "1.0.0"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]
+
+[dependencies]
+# Enable zeroization of the expanded AES key used by aes-gcm.
+aes = { version = "0.8", features = ["zeroize"] }
+aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc", "zeroize"] }
+base64 = "0.23"
+eventsource-stream = "0.2"
+futures-util = { version = "0.3", default-features = false }
+getrandom = "0.4"
+htmd = "0.6"
+log = "0.4"
+percent-encoding = "2"
+r2d2 = "0.8"
+r2d2_sqlite = "0.34"
+regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+rusqlite = { version = "0.39", features = ["bundled"] }
+scrypt = { version = "0.11", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+subtle = "2"
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-log = "2"
+tauri-plugin-opener = "2"
+tempfile = "3"
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt"] }
+tokio-util = "0.7"
+uuid = { version = "1", features = ["v4"] }
+zeroize = "1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["io-util", "net", "time"] }
+
+# Keep the real scrypt work factor in development and behavioral tests.
+[profile.dev.package.scrypt]
+opt-level = 3
+
+[profile.dev.package.salsa20]
+opt-level = 3
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
+opt-level = "s"

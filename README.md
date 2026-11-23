@@ -2,15 +2,15 @@
 
 # 🐟 Fish Notes
 
-A [Bear](https://bear.app)-like desktop Markdown note-taking app · React + Electron + TypeScript
+A [Bear](https://bear.app)-like desktop Markdown note-taking app · React + Tauri v2 + TypeScript
 
-Local-first · AI assist (Claude) · Full-text search · End-to-end encryption · Multiple themes · Tag organization
+Local-first · AI assistant · Full-text search · End-to-end encryption · Multiple themes · Tag organization
 
 English · [简体中文](./README.zh-CN.md)
 
-[![Release](https://img.shields.io/github/v/release/tangqianyu/Fish-Notes?label=release&logo=github)](https://github.com/tangqianyu/Fish-Notes/releases/latest)
+[![Release](https://img.shields.io/github/v/release/frank-1u/Fish-Notes?label=release&logo=github)](https://github.com/frank-1u/Fish-Notes/releases/latest)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)](https://github.com/tangqianyu/Fish-Notes/releases/latest)
+[![Platform](https://img.shields.io/badge/platform-Windows%20x64-lightgrey.svg)](https://github.com/frank-1u/Fish-Notes/releases/latest)
 
 ![Fish Notes](./docs/screenshots/hero.png)
 
@@ -18,14 +18,14 @@ English · [简体中文](./README.zh-CN.md)
 
 ## Download
 
-Grab the installer for your platform from the **[Releases page](https://github.com/tangqianyu/Fish-Notes/releases/latest)**:
+Download the Windows x64 packages from [GitHub Releases](https://github.com/frank-1u/Fish-Notes/releases).
 
-| Platform | File                            |
-| -------- | ------------------------------- |
-| macOS    | `.dmg` (Apple Silicon / Intel)  |
-| Windows  | `Setup.exe`                     |
+| Package | File |
+| --- | --- |
+| NSIS installer | `*-setup.exe` |
+| Portable | `Fish-Notes-<version>-windows-x64-portable.zip` containing `fish-notes.exe` |
 
-> The macOS build is unsigned. If you see "cannot verify the developer" on first launch, right-click the app icon and choose **Open**, or allow it under **System Settings → Privacy & Security**.
+Fish Notes uses the system Microsoft Edge WebView2 Runtime. The installer downloads the WebView2 bootstrapper when needed. For the portable build, install WebView2 separately if it is missing.
 
 ## Screenshots
 
@@ -37,28 +37,26 @@ Grab the installer for your platform from the **[Releases page](https://github.c
 
 | Layer            | Choice                                              |
 | ---------------- | --------------------------------------------------- |
-| Desktop          | Electron 40 + Electron Forge + Vite 5               |
-| Frontend         | React 18 + TypeScript 5.7                           |
+| Desktop          | Tauri v2 + Rust + system WebView               |
+| Frontend         | React 18 + TypeScript 5.7 + Vite 5                           |
 | UI / Styling     | Tailwind CSS 3 + CSS Variables                      |
 | Editor           | CodeMirror 6 (Markdown source + live highlighting)  |
 | Preview          | marked (GFM + breaks)                               |
-| Database         | better-sqlite3 + Drizzle ORM                        |
+| Database         | Bundled SQLite via rusqlite, WAL, r2d2                        |
 | Full-text search | SQLite FTS5                                         |
 | Encryption       | AES-256-GCM + scrypt                                |
-| AI               | Claude Code CLI (`claude -p`, local OAuth token)    |
+| AI               | OpenAI-compatible and Anthropic Messages HTTP APIs    |
 | i18n             | i18next + react-i18next                             |
-| Export           | marked → HTML / direct Markdown / Electron printToPDF |
-| Package manager  | yarn                                                |
+| Export           | Markdown / sanitized HTML / system print to PDF |
+| Package manager  | Yarn Classic                                                |
 
 ## Features
 
-### AI (powered by Claude)
+### AI assistant
 
-- **Generate title** — one click on the ✨ button beside the title to summarize the note into a concise title
-- **Polish text** — select any passage; a bubble appears to let Claude refine the wording while preserving the original meaning and Markdown syntax
-- **Runs through your own Claude Code CLI** — authenticate once in Settings with an OAuth token from `claude setup-token`; no third-party server, requests go straight from your machine to Anthropic
-
-> Requires the [Claude Code CLI](https://docs.claude.com/en/docs/claude-code) installed locally (`npm install -g @anthropic-ai/claude-code`). Set the token and model under **Settings → AI** (default model `claude-sonnet-4-6`).
+- **Generate titles and polish text** — suggest a title or refine a selection while preserving Markdown syntax
+- **Streaming chat** — use the current note or search the knowledge base for context, view reasoning when the provider supplies it, cancel a reply, and reopen saved conversations
+- **Provider settings** — choose OpenAI-compatible or Anthropic Messages and enter the Base URL, API key, and model under **Settings → AI**. The Rust backend calls the configured gateway and stores credentials locally.
 
 ### Editing
 
@@ -80,9 +78,9 @@ Grab the installer for your platform from the **[Releases page](https://github.c
 
 - **Themes** — Light / Dark / Solarized / Anime
 - **Multi-language** — English / Chinese
-- **Auto-save** — 500ms debounce, Cmd+S to save immediately
+- **Auto-save** — 500ms debounce, Cmd/Ctrl+S to save immediately
 - **Three-pane layout** — sidebar | note list | editor, with draggable widths
-- **Native macOS window** — hidden title bar, integrated traffic lights
+- **Native window controls** — system title bar on Windows and Linux, overlay title bar with traffic lights on macOS
 - **External links** — clicking a link in preview opens it in the system browser
 
 ### Security
@@ -96,9 +94,10 @@ Grab the installer for your platform from the **[Releases page](https://github.c
 - **Images** — drag-and-drop, paste, or the `![]()` toolbar button
 - **Local storage** — custom `fish-image://` protocol, UUID-named files
 
-### Export
+### Import and export
 
-- **Multiple formats** — Markdown (.md) / HTML (.html) / PDF (.pdf)
+- **Import** — open Markdown, plain text, or HTML files in the native picker. HTML is converted to Markdown.
+- **Export** — save Markdown or styled HTML with native dialogs, or use the system print dialog to save as PDF.
 
 ## Keyboard Shortcuts
 
@@ -134,96 +133,69 @@ Grab the installer for your platform from the **[Releases page](https://github.c
 
 ## Development
 
+Install Node.js 22, Yarn Classic, Rust stable with Clippy, and the platform dependencies. Windows development requires the MSVC C++ build tools and WebView2. Linux uses GTK and WebKitGTK 4.1, and macOS requires the Xcode command-line tools. [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)
+
 ```bash
-# Install dependencies
-yarn install
-
-# Start dev mode
-yarn start
-
-# Lint
-yarn run lint
-
-# Format
-yarn run format
-
-# Type-check
+yarn install --frozen-lockfile
+yarn start                              # Tauri dev window and Vite HMR
 npx tsc --noEmit
-
-# Build the app
-yarn make
+npx vite build
+(cd src-tauri && cargo test --locked)
+(cd src-tauri && cargo clippy --locked --all-targets -- -D warnings)
+yarn package                            # release executable
+yarn make                               # native bundle for the current platform
 ```
 
-## Releasing
+[CI](./.github/workflows/ci.yml) runs the frontend and Linux Rust checks for pull requests and pushes to `main` and `feat/**`.
 
-Building and uploading are handled by GitHub Actions ([`.github/workflows/release.yml`](./.github/workflows/release.yml)): pushing a `v*` tag triggers parallel builds for macOS / Windows, and the artifacts are uploaded to the matching Release automatically.
+## Windows builds and releases
 
-```bash
-# 1. Bump the version in package.json and commit
-# 2. Tag and push
-git tag v1.0.1
-git push origin v1.0.1
+Use **Actions → Release → Run workflow** on the candidate ref and download the Windows x64 artifact from the run summary. GitHub requires the workflow on the default branch to enable the manual trigger. To build a candidate locally on a Windows x64 host, run `npx tauri build --target x86_64-pc-windows-msvc -- --locked` after installing dependencies. The installer is under `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/`, and `fish-notes.exe` is in the target's `release/` directory. [GitHub manual workflow guide](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)
+
+For a tagged release, update the version in `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml` together and refresh `src-tauri/Cargo.lock`. Push a matching tag such as `v1.0.1` after Windows acceptance. The [Release workflow](./.github/workflows/release.yml) publishes both Windows packages to the matching GitHub Release. The independent macOS job builds the app with its Overlay window configuration.
+
+### Windows host acceptance
+
+Record the candidate commit, Windows and WebView2 versions, and results for both the NSIS-installed app and the executable extracted from the portable ZIP.
+
+1. Verify each package is **≤ 15 MB**, excluding the system WebView2 Runtime. Install with NSIS and launch from the Start menu. Extract the portable ZIP, check that it contains only `fish-notes.exe`, and launch it on a host with WebView2. Check the native title bar, maximize/restore, Snap Layouts, and display scaling.
+2. Close Fish Notes and wait for its WebView2 processes to exit. Time a cold launch until the editor accepts input. The target is **≤ 1.0 s**. Record steady-state memory while idle and during normal editing, summing Fish Notes and its WebView2 processes. The target is **≤ 120 MB** in both states.
+3. Create, edit, autosave, and reopen notes. Check pinning, trash, restore, permanent deletion, nested tag management, and full-text search. Verify locked notes are absent from search and that password setup, change, removal, and session lock behave correctly.
+4. Paste and drop images, render them in preview, and open an external link in the default browser. Import Markdown, text, and HTML. Export Markdown and HTML, then save a PDF with images through the system print dialog.
+5. Configure the AI gateway and exercise connection testing, title suggestions, polishing, streaming chat with note and knowledge-base context, reasoning where available, cancellation, and history after relaunch. Type rapidly in a long note, switch notes and themes, scroll a large note list, and interact with the app during streaming. Check for input lag, flicker, and scrolling stalls.
+
+Use separate test data directories for the two packages. For example, launch the portable executable from its extraction directory in PowerShell:
+
+```powershell
+$env:FISH_NOTES_USER_DATA = Join-Path (Get-Location).Path 'fish-notes-data'
+.\fish-notes.exe
 ```
 
-A few minutes later, find the auto-generated release and installers on the [Releases page](https://github.com/tangqianyu/Fish-Notes/releases).
+## Project structure
 
-> macOS artifacts are not code-signed / notarized. To remove the "cannot verify the developer" prompt, configure an Apple Developer certificate and add a signing step to the workflow.
-
-## Project Structure
-
-```
-src/
-├── main.ts                              # Electron main process entry
-├── preload.ts                           # IPC bridge, exposes window.api
-├── main/
-│   ├── database/                        # SQLite data layer (schema, CRUD, FTS5, migrations)
-│   ├── ipc/                             # IPC handlers (notes/tags/search/encryption/export)
-│   ├── export/                          # Export modules (Markdown/HTML/PDF)
-│   ├── markdown.ts                      # Shared MD utils (marked, turndown, strip, detect)
-│   ├── encryption.ts                    # AES-256-GCM + scrypt
-│   └── images.ts                        # fish-image:// protocol image storage
-└── renderer/
-    ├── main.tsx                         # React entry
-    ├── App.tsx                          # Root component + providers
-    ├── index.css                        # Tailwind + CodeMirror + Markdown preview styles
-    ├── components/
-    │   ├── Layout.tsx                   # Three-pane layout + shortcuts
-    │   ├── Sidebar.tsx                  # Sidebar (navigation + tag tree)
-    │   ├── NoteList.tsx                 # Note list
-    │   ├── Editor.tsx                   # Editor container + export menu
-    │   ├── TagBar.tsx                   # Tag management bar
-    │   ├── TitleBar.tsx                 # macOS drag region
-    │   ├── SearchBar.tsx                # Full-text search popup
-    │   ├── PasswordPrompt.tsx           # Password prompt
-    │   ├── Settings.tsx                 # Theme + encryption settings
-    │   ├── Tooltip.tsx                  # Portal-based tooltip with kbd shortcuts
-    │   └── editor/
-    │       ├── MarkdownEditor.tsx       # 3-tab switching entry
-    │       ├── CodeMirrorView.tsx       # CodeMirror 6 wrapper
-    │       ├── MarkdownPreview.tsx      # marked rendering + external links
-    │       ├── EditorToolbar.tsx        # Toolbar (i18n + platform shortcuts)
-    │       ├── TablePicker.tsx          # 8×8 table grid picker
-    │       └── extensions/              # CodeMirror extensions (commands / smart / image / themes)
-    ├── contexts/                        # React Context (AppContext, ThemeContext)
-    ├── hooks/                           # Custom hooks (useAutoSave)
-    ├── utils/                           # Utilities (tagParser, mdUtils)
-    ├── i18n/                            # i18n config + translation files
-    ├── types/                           # TypeScript type definitions
-    └── styles/themes/                   # Theme CSS variables (4 themes)
+```text
+src/renderer/
+├── api/                  # typed Tauri commands and chat channels
+├── components/           # note list, CodeMirror editor, preview, AI, settings
+├── contexts/             # application, theme, and assistant state
+└── styles/               # themes, Markdown preview, and print
+src-tauri/
+├── src/
+│   ├── desktop.rs        # Tauri window, plugins, and protocol registration
+│   ├── commands/         # IPC to application services
+│   ├── service.rs        # shared application state and service entry point
+│   ├── db/               # SQLite schema, connection pool, and FTS5
+│   ├── ai/               # HTTP providers, SSE streaming, and retrieval
+│   ├── crypto/           # passwords, session key, and note encryption
+│   ├── images/           # local image storage and protocol responses
+│   └── import_export/    # import conversion and export file writes
+├── tests/                # service-level tests with real temporary SQLite
+└── tauri*.conf.json      # shared and platform-specific desktop settings
 ```
 
-## Database
+## Local data
 
-SQLite file location: `~/Library/Application Support/Fish Notes/` (macOS)
-
-**Four tables:**
-
-- `notes` — id, title, content (Markdown), content_text (plain text for FTS), content_format, content_html_legacy (HTML→MD migration backup), created_at, updated_at, is_trashed, is_pinned, is_locked
-- `tags` — id, name (unique), parent_id, is_pinned
-- `note_tags` — note_id, tag_id (many-to-many)
-- `app_settings` — key, value (password hash, salt, etc.)
-
-Schema migrations run on startup (`database/index.ts`), including the historical md ↔ html bidirectional migration.
+`fish-notes.db` and the `images/` directory live in Tauri's app data directory for `com.fishnotes.desktop` by default. Set `FISH_NOTES_USER_DATA` before launch to use another directory. SQLite stores notes, tags, note-tag links, settings, chat sessions, and messages. FTS5 indexes titles and plaintext for unlocked notes.
 
 ## License
 

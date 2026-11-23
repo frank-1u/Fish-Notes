@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "ESNext",
-    "module": "commonjs",
+    "module": "ESNext",
     "allowJs": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
@@ -9,13 +9,11 @@
     "sourceMap": true,
     "baseUrl": ".",
     "outDir": "dist",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "jsx": "react-jsx",
     "strict": true,
-    "paths": {
-      "@renderer/*": ["src/renderer/*"]
-    }
+    "types": ["vite/client"]
   },
-  "include": ["src/**/*", "forge.env.d.ts"]
+  "include": ["src/renderer", "vite.config.mts"]
 }

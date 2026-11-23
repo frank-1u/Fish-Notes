@@ -2,15 +2,15 @@
 
 # 🐟 Fish Notes
 
-一款类似 [Bear](https://bear.app/zh/) 的桌面 Markdown 笔记应用 · React + Electron + TypeScript
+一款类似 [Bear](https://bear.app/zh/) 的桌面 Markdown 笔记应用 · React + Tauri v2 + TypeScript
 
-本地优先 · AI 辅助（Claude）· 全文搜索 · 端到端加密 · 多主题 · 标签组织
+本地优先 · AI 助手· 全文搜索 · 端到端加密 · 多主题 · 标签组织
 
 [English](./README.md) · 简体中文
 
-[![Release](https://img.shields.io/github/v/release/tangqianyu/Fish-Notes?label=下载&logo=github)](https://github.com/tangqianyu/Fish-Notes/releases/latest)
+[![Release](https://img.shields.io/github/v/release/frank-1u/Fish-Notes?label=下载&logo=github)](https://github.com/frank-1u/Fish-Notes/releases/latest)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)](https://github.com/tangqianyu/Fish-Notes/releases/latest)
+[![Platform](https://img.shields.io/badge/platform-Windows%20x64-lightgrey.svg)](https://github.com/frank-1u/Fish-Notes/releases/latest)
 
 ![Fish Notes](./docs/screenshots/hero.png)
 
@@ -18,14 +18,14 @@
 
 ## 下载
 
-前往 **[Releases 页面](https://github.com/tangqianyu/Fish-Notes/releases/latest)** 下载对应平台的安装包：
+在 [GitHub Releases](https://github.com/frank-1u/Fish-Notes/releases) 下载 Windows x64 打包产物。
 
-| 平台    | 文件                              |
-| ------- | --------------------------------- |
-| macOS   | `.dmg`（Apple Silicon / Intel）   |
-| Windows | `Setup.exe`                       |
+| 版本 | 文件 |
+| --- | --- |
+| NSIS 安装包 | `*-setup.exe` |
+| 便携版 | `Fish-Notes-<version>-windows-x64-portable.zip`，内含 `fish-notes.exe` |
 
-> macOS 应用未签名，首次打开若提示「无法验证开发者」，请右键点击应用图标选择「打开」，或在「系统设置 → 隐私与安全性」中放行。
+应用使用系统 Microsoft Edge WebView2 Runtime。安装包在需要时下载 WebView2 引导程序。运行便携版前，请确认系统已安装 WebView2。
 
 ## 界面预览
 
@@ -37,28 +37,26 @@
 
 | 层面     | 选型                                                |
 | -------- | --------------------------------------------------- |
-| 桌面框架 | Electron 40 + Electron Forge + Vite 5               |
-| 前端     | React 18 + TypeScript 5.7                           |
+| 桌面框架 | Tauri v2 + Rust + 系统 WebView               |
+| 前端     | React 18 + TypeScript 5.7 + Vite 5                           |
 | UI/样式  | Tailwind CSS 3 + CSS Variables                      |
 | 编辑器   | CodeMirror 6（Markdown 源码 + 实时高亮）            |
 | 预览渲染 | marked（GFM + breaks）                              |
-| 数据库   | better-sqlite3 + Drizzle ORM                        |
+| 数据库   | rusqlite 内置 SQLite，使用 WAL 和 r2d2                        |
 | 全文搜索 | SQLite FTS5                                         |
 | 加密     | AES-256-GCM + scrypt                                |
-| AI       | Claude Code CLI（`claude -p`，本机 OAuth token）    |
+| AI       | OpenAI-compatible 与 Anthropic Messages HTTP API    |
 | 国际化   | i18next + react-i18next                             |
-| 导出     | marked → HTML / Markdown 直写 / Electron printToPDF |
-| 包管理   | yarn                                                |
+| 导出     | Markdown / 净化后的 HTML / 系统打印为 PDF |
+| 包管理   | Yarn Classic                                                |
 
 ## 功能
 
-### AI（基于 Claude）
+### AI 助手
 
-- **生成标题** — 点标题栏旁的 ✨ 按钮，一键把笔记内容概括成简洁标题
-- **润色文字** — 选中任意段落，弹出气泡交给 Claude 润色，保持原意和 Markdown 语法不变
-- **走你自己的 Claude Code CLI** — 在设置里粘贴一次 `claude setup-token` 生成的 OAuth token 即可；无第三方服务器，请求从你本机直连 Anthropic
-
-> 需本机安装 [Claude Code CLI](https://docs.claude.com/en/docs/claude-code)（`npm install -g @anthropic-ai/claude-code`）。在 **设置 → AI** 中填写 token 和模型（默认 `claude-sonnet-4-6`）。
+- **生成标题与润色文字** — 概括笔记标题，或保留 Markdown 语法润色选中文本
+- **流式聊天** — 支持当前笔记与知识库上下文、思考过程展示、取消与历史会话
+- **网关设置** — 在 **设置 → AI** 选择 OpenAI-compatible 或 Anthropic Messages，填写 Base URL、API Key 和模型。Rust 后端直连网关，在本地保存密钥。
 
 ### 编辑
 
@@ -80,9 +78,9 @@
 
 - **多主题** — Light / Dark / Solarized / Anime 四套主题
 - **多语言** — 中文 / 英文
-- **自动保存** — 500ms 防抖，Cmd+S 立即保存
+- **自动保存** — 500ms 防抖，Cmd/Ctrl+S 立即保存
 - **三栏布局** — 侧边栏 | 笔记列表 | 编辑器，可拖拽调整宽度
-- **macOS 原生窗口** — 隐藏标题栏，traffic lights 集成
+- **原生窗口控件** — Windows 和 Linux 使用系统标题栏，macOS 使用 Overlay 标题栏和红绿灯
 - **外链处理** — 预览中点击链接用系统默认浏览器打开
 
 ### 安全
@@ -96,9 +94,10 @@
 - **图片支持** — 拖拽、粘贴、`![]()` 工具栏按钮三种方式
 - **本地存储** — 自定义 `fish-image://` 协议，UUID 命名
 
-### 导出
+### 导入导出
 
-- **多格式** — Markdown (.md) / HTML (.html) / PDF (.pdf)
+- **导入** — 通过原生对话框读取 Markdown、纯文本和 HTML。HTML 会转换为 Markdown。
+- **导出** — 通过原生对话框保存 Markdown 或带样式的 HTML，通过系统打印对话框另存为 PDF。
 
 ## 快捷键
 
@@ -134,96 +133,54 @@
 
 ## 开发
 
+准备 Node.js 22、Yarn Classic、Rust stable、Clippy 和对应平台的系统依赖。Windows 需要 MSVC C++ 生成工具和 WebView2，Linux 需要 GTK 和 WebKitGTK 4.1，macOS 需要 Xcode 命令行工具。[Tauri 前置条件](https://v2.tauri.app/start/prerequisites/)
+
 ```bash
-# 安装依赖
-yarn install
-
-# 启动开发模式
+yarn install --frozen-lockfile
 yarn start
-
-# ESLint 检查
-yarn run lint
-
-# Prettier 格式化
-yarn run format
-
-# 类型检查
 npx tsc --noEmit
-
-# 打包应用
+npx vite build
+(cd src-tauri && cargo test --locked)
+(cd src-tauri && cargo clippy --locked --all-targets -- -D warnings)
+yarn package
 yarn make
 ```
 
-## 发布新版本
+[CI](./.github/workflows/ci.yml) 在 PR 和推送到 `main`、`feat/**` 时运行前端检查和 Linux Rust 门禁。
 
-打包和上传由 GitHub Actions（[`.github/workflows/release.yml`](./.github/workflows/release.yml)）自动完成：推送一个 `v*` 标签即触发 macOS / Windows 两平台并行打包，产物自动上传到对应的 Release。
+## Windows 打包和发布
 
-```bash
-# 1. 更新 package.json 里的 version，提交
-# 2. 打标签并推送
-git tag v1.0.1
-git push origin v1.0.1
-```
+在默认分支具备手动触发配置后，从 **Actions → Release → Run workflow** 选择候选分支，在运行详情下载 Windows x64 Artifact。也可在 Windows x64 主机安装依赖后运行 `npx tauri build --target x86_64-pc-windows-msvc -- --locked`，在 `src-tauri/target/x86_64-pc-windows-msvc/release/` 找到 `fish-notes.exe`，在该目录的 `bundle/nsis/` 找到安装包。
 
-几分钟后到 [Releases](https://github.com/tangqianyu/Fish-Notes/releases) 查看自动生成的发布与安装包。
+同步更新 `package.json`、`src-tauri/tauri.conf.json` 和 `src-tauri/Cargo.toml` 的版本号，并刷新 `src-tauri/Cargo.lock`。完成真机验收后，推送匹配的 tag，例如 `v1.0.1`。[Release 工作流](./.github/workflows/release.yml) 会将两个 Windows 包上传至对应的 GitHub Release。macOS 独立验证 Overlay 窗口配置的构建。
 
-> macOS 产物未做代码签名 / 公证。如需消除「无法验证开发者」提示，需配置 Apple 开发者证书并在 workflow 中加入签名步骤。
+分别对 NSIS 安装版和便携版完成真机验收。两个包的体积均须 ≤ 15 MB（不含系统 WebView2 Runtime）。冷启动至可交互须 ≤ 1.0 秒，空载与日常编辑时 Fish Notes 和 WebView2 进程合计内存均须 ≤ 120 MB。完整功能与流畅度清单见 [Windows 真机验收](./README.md#windows-host-acceptance)。
 
 ## 项目结构
 
-```
-src/
-├── main.ts                              # Electron 主进程入口
-├── preload.ts                           # IPC 桥接，暴露 window.api
-├── main/
-│   ├── database/                        # SQLite 数据层（schema, CRUD, FTS5, 迁移）
-│   ├── ipc/                             # IPC 处理器（笔记/标签/搜索/加密/导出）
-│   ├── export/                          # 导出模块（Markdown/HTML/PDF）
-│   ├── markdown.ts                      # 共享 MD 工具（marked、turndown、strip、detect）
-│   ├── encryption.ts                    # AES-256-GCM + scrypt
-│   └── images.ts                        # fish-image:// 协议图片存储
-└── renderer/
-    ├── main.tsx                         # React 入口
-    ├── App.tsx                          # 根组件 + providers
-    ├── index.css                        # Tailwind + CodeMirror + Markdown 预览样式
-    ├── components/
-    │   ├── Layout.tsx                   # 三栏布局 + 快捷键
-    │   ├── Sidebar.tsx                  # 侧边栏（导航 + 标签树）
-    │   ├── NoteList.tsx                 # 笔记列表
-    │   ├── Editor.tsx                   # 编辑器容器 + 导出菜单
-    │   ├── TagBar.tsx                   # 标签管理栏
-    │   ├── TitleBar.tsx                 # macOS 拖拽区域
-    │   ├── SearchBar.tsx                # 全文搜索弹窗
-    │   ├── PasswordPrompt.tsx           # 密码输入弹窗
-    │   ├── Settings.tsx                 # 主题 + 加密设置
-    │   ├── Tooltip.tsx                  # Portal-based tooltip，支持 kbd 快捷键
-    │   └── editor/
-    │       ├── MarkdownEditor.tsx       # 3 Tab 切换主入口
-    │       ├── CodeMirrorView.tsx       # CodeMirror 6 封装
-    │       ├── MarkdownPreview.tsx      # marked 渲染 + 外链处理
-    │       ├── EditorToolbar.tsx        # 工具栏（i18n + 平台快捷键）
-    │       ├── TablePicker.tsx          # 8×8 表格网格选择器
-    │       └── extensions/              # CodeMirror 扩展（commands / smart / image / themes）
-    ├── contexts/                        # React Context（AppContext, ThemeContext）
-    ├── hooks/                           # 自定义 Hooks（useAutoSave）
-    ├── utils/                           # 工具函数（tagParser, mdUtils）
-    ├── i18n/                            # i18n 配置 + 翻译文件
-    ├── types/                           # TypeScript 类型定义
-    └── styles/themes/                   # 主题 CSS 变量（4 个主题）
+```text
+src/renderer/
+├── api/                  # 类型化 Tauri 命令和聊天 Channel
+├── components/           # 笔记列表、CodeMirror 编辑器、预览、AI 与设置
+├── contexts/             # 应用、主题和助手状态
+└── styles/               # 主题、Markdown 预览与打印样式
+src-tauri/
+├── src/
+│   ├── desktop.rs        # Tauri 窗口、插件和协议注册
+│   ├── commands/         # 连接应用服务的 IPC 命令
+│   ├── service.rs        # 应用共享状态与服务入口
+│   ├── db/               # SQLite Schema、连接池和 FTS5
+│   ├── ai/               # HTTP 网关、SSE 流式响应和检索
+│   ├── crypto/           # 密码、会话密钥与笔记加密
+│   ├── images/           # 本地图片存储与协议响应
+│   └── import_export/    # 导入格式转换与导出落盘
+├── tests/                # 使用真实临时 SQLite 数据库的服务层测试
+└── tauri*.conf.json      # 公共及平台专用桌面配置
 ```
 
-## 数据库
+## 本地数据
 
-SQLite 文件位置：`~/Library/Application Support/Fish Notes/`（macOS）
-
-**四张表**：
-
-- `notes` — id, title, content (Markdown), content_text (FTS 纯文本), content_format, content_html_legacy (HTML→MD 迁移备份), created_at, updated_at, is_trashed, is_pinned, is_locked
-- `tags` — id, name (unique), parent_id, is_pinned
-- `note_tags` — note_id, tag_id（多对多）
-- `app_settings` — key, value（密码哈希、盐值等）
-
-启动时自动执行 schema 迁移（`database/index.ts`），含历史的 md ↔ html 双向迁移。
+默认将 `fish-notes.db` 和 `images/` 写入 `com.fishnotes.desktop` 的 Tauri 应用数据目录。启动前设置 `FISH_NOTES_USER_DATA` 可指定独立的数据目录。SQLite 保存笔记、标签、笔记标签关联、应用设置、聊天会话和消息，FTS5 索引未加密笔记的标题和正文纯文本。
 
 ## License
 

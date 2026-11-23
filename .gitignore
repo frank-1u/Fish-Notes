@@ -88,8 +88,10 @@ typings/
 # Vite
 .vite/
 
-# Electron-Forge
-out/
+# Tauri
+/dist/
+/src-tauri/target/
+/src-tauri/gen/
 
 # GitNexus index (local code-graph storage, 40MB+)
 /.gitnexus/

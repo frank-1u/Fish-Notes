@@ -1,7 +1,8 @@
 node_modules
 .vite
-out
 dist
+src-tauri/target
+src-tauri/gen
 .next
 
 public/tinymce

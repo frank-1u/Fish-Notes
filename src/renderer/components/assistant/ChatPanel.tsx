@@ -1,7 +1,8 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { parseAppError, type ChatData } from '../../api';
+import { memo, useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAssistant, type UiMessage } from '../../contexts/AssistantContext';
-import { useApp } from '../../contexts/AppContext';
+import { useAppActions, useNoteView } from '../../contexts/AppContext';
 import { message } from '../message';
 import MarkdownPreview from '../editor/MarkdownPreview';
 import {
@@ -19,6 +20,8 @@ import {
 const GEO_KEY = 'fish-notes:assistant-panel';
 const MIN_W = 300;
 const MIN_H = 360;
+const EMPTY_MESSAGES: UiMessage[] = [];
+const FOLLOW_THRESHOLD = 48;
 
 interface Geo {
   x: number;
@@ -57,25 +60,15 @@ function ThinkingBlock({ msg }: { msg: UiMessage }) {
 
   // keep the live view pinned to the latest thought
   useEffect(() => {
-    if (live && bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
+    if (!live) return;
+    const frame = requestAnimationFrame(() => {
+      const body = bodyRef.current;
+      if (body) body.scrollTop = body.scrollHeight;
+    });
+    return () => cancelAnimationFrame(frame);
   }, [live, msg.thinking]);
 
-  const tokens = msg.thinkingTokens ?? 0;
-  const hasText = !!msg.thinking?.trim();
-  if (!hasText && !tokens) return null;
-
-  // some models (e.g. Opus 4.8 via CLI) redact thinking text and only report token
-  // counts — show a live "thinking" indicator instead of an expandable transcript
-  if (!hasText) {
-    return (
-      <div
-        className={live ? 'fn-pulse' : undefined}
-        style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 6 }}
-      >
-        {live ? t('Thinking…') : t('Thought for a while')} · ~{tokens} tokens
-      </div>
-    );
-  }
+  if (!msg.thinking?.trim()) return null;
 
   const open = live || expanded;
   return (
@@ -119,7 +112,7 @@ function ThinkingBlock({ msg }: { msg: UiMessage }) {
   );
 }
 
-function MessageBubble({
+const MessageBubble = memo(function MessageBubble({
   msg,
   onSaveNote,
   onOpenNote,
@@ -209,7 +202,7 @@ function MessageBubble({
       )}
     </div>
   );
-}
+});
 
 export default function ChatPanel() {
   const { t } = useTranslation();
@@ -233,17 +226,19 @@ export default function ChatPanel() {
     prefill,
     clearPrefill,
   } = useAssistant();
-  const { state: appState, selectNote, setViewMode } = useApp();
+  const { selectNote, setViewMode } = useAppActions();
+  const { viewMode } = useNoteView();
 
   const openNote = useCallback(
     (noteId: string) => {
-      if (appState.viewMode !== 'all') setViewMode('all');
+      if (viewMode !== 'all') setViewMode('all');
       selectNote(noteId);
     },
-    [appState.viewMode, setViewMode, selectNote],
+    [viewMode, setViewMode, selectNote],
   );
 
-  const messages = activeTab?.messages ?? [];
+  const messages = activeTab?.messages ?? EMPTY_MESSAGES;
+  const streamingMessage = activeTab?.streamingMessage;
   const boundNote = activeTab?.boundNote ?? null;
   const isStreaming = activeTab?.isStreaming ?? false;
 
@@ -251,8 +246,23 @@ export default function ChatPanel() {
   const [showHistory, setShowHistory] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const followLatest = useRef(true);
 
   const isFree = !boundNote;
+  const saveMessage = useCallback(
+    (text: string) => {
+      void saveAsNote(text).catch((error: unknown) => message.error(parseAppError(error).message));
+    },
+    [saveAsNote],
+  );
+  const onSaveMessage = isFree ? saveMessage : undefined;
+  const historyBubbles = useMemo(
+    () =>
+      messages.map((msg) => (
+        <MessageBubble key={msg.id} msg={msg} onSaveNote={onSaveMessage} onOpenNote={openNote} />
+      )),
+    [messages, onSaveMessage, openNote],
+  );
 
   // reset composer text when switching tabs
   useEffect(() => {
@@ -268,10 +278,23 @@ export default function ChatPanel() {
     }
   }, [prefill, clearPrefill]);
 
-  // autoscroll on new content
   useEffect(() => {
-    if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
-  }, [messages]);
+    followLatest.current = true;
+  }, [activeKey, isOpen, showHistory]);
+
+  useEffect(() => {
+    if (!followLatest.current || !isOpen || showHistory) return;
+    const frame = requestAnimationFrame(() => {
+      const list = listRef.current;
+      if (list && followLatest.current) list.scrollTop = list.scrollHeight;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [activeKey, isOpen, showHistory, messages, streamingMessage]);
+
+  const trackScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    const { scrollHeight, scrollTop, clientHeight } = event.currentTarget;
+    followLatest.current = scrollHeight - scrollTop - clientHeight < FOLLOW_THRESHOLD;
+  }, []);
 
   // auto-grow the composer height to fit its content (capped, then scrolls)
   useEffect(() => {
@@ -281,12 +304,20 @@ export default function ChatPanel() {
     el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
   }, [input]);
 
+  const sendMessage = useCallback(
+    (text: string) => {
+      followLatest.current = true;
+      void send(text).catch((error: unknown) => message.error(parseAppError(error).message));
+    },
+    [send],
+  );
+
   const submit = useCallback(() => {
     const text = input;
     if (!text.trim() || isStreaming) return;
     setInput('');
-    send(text);
-  }, [input, isStreaming, send]);
+    sendMessage(text);
+  }, [input, isStreaming, sendMessage]);
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     // Ignore Enter while an IME composition is active — pressing Enter to confirm a
@@ -393,9 +424,6 @@ export default function ChatPanel() {
           backgroundColor: 'var(--card-bg)',
           border: '1px solid var(--border-primary)',
           boxShadow: '0 16px 48px rgba(0,0,0,0.28)',
-          // opt out of the macOS title-bar drag region so buttons stay clickable
-          // even when the panel is dragged over the top bar
-          WebkitAppRegion: 'no-drag',
         } as React.CSSProperties
       }
     >
@@ -433,7 +461,11 @@ export default function ChatPanel() {
         {isFree && messages.length > 0 && (
           <HeaderBtn
             title={t('Save conversation as note')}
-            onClick={() => saveAsNote(formatTranscript(messages))}
+            onClick={() =>
+              saveMessage(
+                formatTranscript(streamingMessage ? [...messages, streamingMessage] : messages),
+              )
+            }
           >
             <NotesIcon size={14} />
           </HeaderBtn>
@@ -528,26 +560,35 @@ export default function ChatPanel() {
           chats={chats}
           currentChatId={activeTab?.chatId ?? null}
           onSelect={(id) => {
-            selectChat(id);
-            setShowHistory(false);
+            void selectChat(id)
+              .then(() => setShowHistory(false))
+              .catch((error: unknown) => {
+                message.error(parseAppError(error).message);
+              });
           }}
-          onDelete={deleteChat}
+          onDelete={(id) => {
+            void deleteChat(id).catch((error: unknown) =>
+              message.error(parseAppError(error).message),
+            );
+          }}
         />
       ) : !activeTab ? (
         <NoTabState onNew={newTab} />
       ) : (
-        <div ref={listRef} className="flex-1 overflow-y-auto px-3 py-3">
+        <div ref={listRef} onScroll={trackScroll} className="flex-1 overflow-y-auto px-3 py-3">
           {messages.length === 0 ? (
-            <EmptyState bound={!!boundNote} onPick={(text) => send(text)} />
-          ) : (
-            messages.map((m) => (
+            <EmptyState bound={!!boundNote} onPick={sendMessage} />
+          ) : streamingMessage ? (
+            historyBubbles.concat(
               <MessageBubble
-                key={m.id}
-                msg={m}
-                onSaveNote={isFree ? (text) => saveAsNote(text) : undefined}
+                key={streamingMessage.id}
+                msg={streamingMessage}
+                onSaveNote={onSaveMessage}
                 onOpenNote={openNote}
-              />
-            ))
+              />,
+            )
+          ) : (
+            historyBubbles
           )}
         </div>
       )}

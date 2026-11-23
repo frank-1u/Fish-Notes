@@ -1,9 +1,16 @@
-import { useState, useEffect, useCallback, useRef, memo } from 'react';
+import { type NoteSummary } from '../api';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, memo } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useTranslation } from 'react-i18next';
-import { useApp } from '../contexts/AppContext';
-import { useAssistant } from '../contexts/AssistantContext';
+import {
+  useAppActions,
+  useEncryption,
+  useNotes,
+  useNoteSelection,
+  useNoteView,
+} from '../contexts/AppContext';
+import { useAssistantEntryPoints } from '../contexts/AssistantContext';
 import PasswordPrompt from './PasswordPrompt';
-import { buildNotePreview } from '../utils/mdUtils';
 import { PinIcon, RobotIcon } from './icons';
 import { message } from './message';
 
@@ -21,7 +28,7 @@ interface NoteContextMenu {
 function NoteList({ width, onResizeStart }: NoteListProps) {
   const { t } = useTranslation();
   const {
-    state,
+    getNoteSummary,
     createNote,
     importNotes,
     selectNote,
@@ -31,12 +38,11 @@ function NoteList({ width, onResizeStart }: NoteListProps) {
     togglePinNote,
     lockNote,
     unlockNote,
-    encryptionReady,
-    sessionUnlocked,
     verifyPassword,
-  } = useApp();
-  const { askAboutNote } = useAssistant();
-  const { notes, selectedNoteId, selectSeq, viewMode } = state;
+  } = useAppActions();
+  const { encryptionReady, sessionUnlocked } = useEncryption();
+  const { askAboutNote } = useAssistantEntryPoints();
+  const { viewMode } = useNoteView();
 
   const [contextMenu, setContextMenu] = useState<NoteContextMenu | null>(null);
   const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
@@ -125,10 +131,10 @@ function NoteList({ width, onResizeStart }: NoteListProps) {
 
   const handleAskAi = useCallback(() => {
     if (!contextMenu) return;
-    const note = notes.find((n) => n.id === contextMenu.noteId);
+    const note = getNoteSummary(contextMenu.noteId);
     setContextMenu(null);
     if (note) askAboutNote({ id: note.id, title: note.title || t('Untitled') });
-  }, [contextMenu, notes, askAboutNote, t]);
+  }, [contextMenu, getNoteSummary, askAboutNote, t]);
 
   const handleRestore = useCallback(async () => {
     if (!contextMenu) return;
@@ -179,11 +185,10 @@ function NoteList({ width, onResizeStart }: NoteListProps) {
     async (password: string) => {
       const ok = await verifyPassword(password);
       if (ok) {
+        const pendingAction = pendingActionRef.current;
+        pendingActionRef.current = null;
         setShowPasswordPrompt(false);
-        if (pendingActionRef.current) {
-          await pendingActionRef.current();
-          pendingActionRef.current = null;
-        }
+        await pendingAction?.();
       }
       return ok;
     },
@@ -195,21 +200,7 @@ function NoteList({ width, onResizeStart }: NoteListProps) {
     pendingActionRef.current = null;
   }, []);
 
-  const contextNote = contextMenu ? notes.find((n) => n.id === contextMenu.noteId) : null;
-
-  // When the selection jumps (e.g. from search), scroll the list to reveal it.
-  // Keyed by id + selectSeq: re-selecting the SAME note (search again) still scrolls,
-  // while content edits (notes updates) don't keep yanking the list back.
-  const selectedItemRef = useRef<HTMLButtonElement>(null);
-  const lastScrolledKeyRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!selectedNoteId) return;
-    const key = `${selectedNoteId}:${selectSeq}`;
-    if (lastScrolledKeyRef.current === key) return;
-    if (!selectedItemRef.current) return; // list not loaded yet; retry on next notes change
-    lastScrolledKeyRef.current = key;
-    selectedItemRef.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }, [selectedNoteId, selectSeq, notes]);
+  const contextNote = contextMenu ? getNoteSummary(contextMenu.noteId) : null;
 
   return (
     <div
@@ -269,7 +260,7 @@ function NoteList({ width, onResizeStart }: NoteListProps) {
                   icon="M12 4v16m8-8H4"
                 />
                 <NewMenuItem
-                  label={importing ? t('Importing...') : t('Import (md / html)')}
+                  label={importing ? t('Importing...') : t('Import (md / txt / html)')}
                   onClick={handleImport}
                   disabled={importing}
                   icon="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M12 4v12m0 0l-4-4m4 4l4-4"
@@ -280,28 +271,7 @@ function NoteList({ width, onResizeStart }: NoteListProps) {
         )}
       </div>
 
-      {/* Note list */}
-      <div className="flex-1 overflow-y-auto">
-        {notes.length === 0 ? (
-          <div
-            className="flex items-center justify-center h-full text-sm"
-            style={{ color: 'var(--text-tertiary)' }}
-          >
-            {t('No notes')}
-          </div>
-        ) : (
-          notes.map((note) => (
-            <NoteListItem
-              key={note.id}
-              note={note}
-              isSelected={note.id === selectedNoteId}
-              itemRef={note.id === selectedNoteId ? selectedItemRef : undefined}
-              onSelect={selectNote}
-              onContextMenu={handleContextMenu}
-            />
-          ))
-        )}
-      </div>
+      <VirtualNoteList onSelect={selectNote} onContextMenu={handleContextMenu} />
 
       {/* Resize handle */}
       <div
@@ -376,6 +346,73 @@ function NoteList({ width, onResizeStart }: NoteListProps) {
   );
 }
 
+const VirtualNoteList = memo(function VirtualNoteList({
+  onSelect,
+  onContextMenu,
+}: {
+  onSelect: (id: string) => void;
+  onContextMenu: (e: React.MouseEvent, noteId: string) => void;
+}) {
+  const { t } = useTranslation();
+  const notes = useNotes();
+  const { selectedNoteId, selectSeq } = useNoteSelection();
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const revealed = useRef<{ id: string; seq: number }>();
+  const getItemKey = useCallback((index: number) => notes[index].id, [notes]);
+  const virtualizer = useVirtualizer({
+    count: notes.length,
+    getScrollElement: () => scrollRef.current,
+    getItemKey,
+    estimateSize: (index) => (notes[index].isLocked || notes[index].preview ? 85 : 65),
+    overscan: 6,
+    useFlushSync: false,
+  });
+
+  useLayoutEffect(() => {
+    if (!selectedNoteId) {
+      revealed.current = undefined;
+      return;
+    }
+    if (revealed.current?.id === selectedNoteId && revealed.current.seq === selectSeq) return;
+    const index = notes.findIndex((note) => note.id === selectedNoteId);
+    if (index === -1) return; // Search may select an ID before its list has loaded.
+    revealed.current = { id: selectedNoteId, seq: selectSeq };
+    virtualizer.scrollToIndex(index, { align: 'auto' });
+  }, [notes, selectedNoteId, selectSeq, virtualizer]);
+
+  return (
+    <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
+      {notes.length === 0 ? (
+        <div
+          className="flex items-center justify-center h-full text-sm"
+          style={{ color: 'var(--text-tertiary)' }}
+        >
+          {t('No notes')}
+        </div>
+      ) : (
+        <div className="relative" style={{ height: virtualizer.getTotalSize() }}>
+          {virtualizer.getVirtualItems().map(({ key, index, start }) => (
+            <div
+              key={key}
+              ref={virtualizer.measureElement}
+              data-index={index}
+              className="absolute inset-x-0 top-0"
+              style={{ transform: `translateY(${start}px)` }}
+            >
+              <NoteListItem
+                note={notes[index]}
+                isSelected={notes[index].id === selectedNoteId}
+                onSelect={onSelect}
+                onContextMenu={onContextMenu}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+});
+
 function formatRelativeDate(
   dateStr: string,
   t: (key: string, opts?: Record<string, unknown>) => string,
@@ -404,30 +441,24 @@ function formatRelativeDate(
 const NoteListItem = memo(function NoteListItem({
   note,
   isSelected,
-  itemRef,
   onSelect,
   onContextMenu,
 }: {
-  note: NoteData;
+  note: NoteSummary;
   isSelected: boolean;
-  itemRef?: React.Ref<HTMLButtonElement>;
   onSelect: (id: string) => void;
   onContextMenu: (e: React.MouseEvent, noteId: string) => void;
 }) {
   const { t } = useTranslation();
   const title = note.title || t('Untitled');
-  // Prefer the DB-stored plain text; only fall back to stripping markdown for
-  // legacy rows that predate content_text. Avoids re-running regex over full
-  // content on every render.
-  const preview = note.contentText ? note.contentText.slice(0, 80) : buildNotePreview(note.content);
+  const preview = note.preview;
   const date = formatRelativeDate(note.updatedAt, t);
 
   return (
     <button
-      ref={itemRef}
       onClick={() => onSelect(note.id)}
       onContextMenu={(e) => onContextMenu(e, note.id)}
-      className={`fn-note-item w-full text-left px-4 py-3 ${isSelected ? 'fn-note-active' : ''}`}
+      className={`fn-note-item block w-full text-left px-4 py-3 ${isSelected ? 'fn-note-active' : ''}`}
       style={{ borderBottom: '1px solid var(--border-secondary)' }}
     >
       <div

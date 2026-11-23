@@ -1,6 +1,8 @@
+import { api, parseAppError, type TagData } from '../api';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useApp } from '../contexts/AppContext';
+import { useAppActions, useTags } from '../contexts/AppContext';
+import { message } from './message';
 
 interface TagBarProps {
   noteId: string;
@@ -8,8 +10,10 @@ interface TagBarProps {
 
 function TagBar({ noteId }: TagBarProps) {
   const { t } = useTranslation();
-  const { state, addNoteTag, removeNoteTag } = useApp();
-  const [noteTags, setNoteTags] = useState<TagData[]>([]);
+  const { addNoteTag, removeNoteTag } = useAppActions();
+  const tags = useTags();
+  const [loadedTags, setLoadedTags] = useState<{ noteId: string; tags: TagData[] }>();
+  const noteTags = loadedTags?.noteId === noteId ? loadedTags.tags : [];
   const [showPopup, setShowPopup] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const popupRef = useRef<HTMLDivElement>(null);
@@ -17,8 +21,19 @@ function TagBar({ noteId }: TagBarProps) {
 
   // Load tags for this note
   useEffect(() => {
-    window.api.tags.getByNoteId(noteId).then(setNoteTags);
-  }, [noteId, state.tags]);
+    let active = true;
+    void api.tags
+      .getByNoteId(noteId)
+      .then((tags) => {
+        if (active) setLoadedTags({ noteId, tags });
+      })
+      .catch((error: unknown) => {
+        if (active) message.error(parseAppError(error).message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [noteId, tags]);
 
   // Close popup on outside click
   useEffect(() => {
@@ -44,16 +59,24 @@ function TagBar({ noteId }: TagBarProps) {
     async (tagName: string) => {
       const trimmed = tagName.trim();
       if (!trimmed) return;
-      await addNoteTag(noteId, trimmed);
-      setInputValue('');
-      setShowPopup(false);
+      try {
+        await addNoteTag(noteId, trimmed);
+        setInputValue('');
+        setShowPopup(false);
+      } catch (error) {
+        message.error(parseAppError(error).message);
+      }
     },
     [noteId, addNoteTag],
   );
 
   const handleRemove = useCallback(
-    async (tagName: string) => {
-      await removeNoteTag(noteId, tagName);
+    async (tagId: string) => {
+      try {
+        await removeNoteTag(noteId, tagId);
+      } catch (error) {
+        message.error(parseAppError(error).message);
+      }
     },
     [noteId, removeNoteTag],
   );
@@ -73,7 +96,7 @@ function TagBar({ noteId }: TagBarProps) {
 
   // Filter existing tags for suggestions (exclude already-added ones)
   const noteTagNames = noteTags.map((t) => t.name);
-  const suggestions = state.tags
+  const suggestions = tags
     .filter((t) => !noteTagNames.includes(t.name))
     .filter((t) => !inputValue || t.name.toLowerCase().includes(inputValue.toLowerCase()));
 
@@ -94,7 +117,7 @@ function TagBar({ noteId }: TagBarProps) {
         >
           #{tag.name}
           <button
-            onClick={() => handleRemove(tag.name)}
+            onClick={() => handleRemove(tag.id)}
             className="ml-0.5 hover:opacity-70 leading-none"
             style={{ color: 'var(--tag-text, #3b82f6)' }}
           >

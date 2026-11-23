@@ -24,7 +24,3 @@ export function extractTitleFromMarkdown(md: string, fallback = '无标题'): st
   const firstLine = md.split('\n').find((line) => line.trim().length > 0);
   return firstLine ? stripMarkdown(firstLine) || fallback : fallback;
 }
-
-export function buildNotePreview(md: string, max = 80): string {
-  return stripMarkdown(md).slice(0, max);
-}

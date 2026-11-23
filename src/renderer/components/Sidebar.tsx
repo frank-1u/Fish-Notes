@@ -1,8 +1,10 @@
 import { useMemo, useState, useRef, useEffect, useCallback, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useApp } from '../contexts/AppContext';
+import { parseAppError } from '../api';
+import { useAppActions, useNoteView, useTags } from '../contexts/AppContext';
 import { buildTagTree, type TagTreeNode } from '../utils/tagParser';
 import { NotesIcon, TrashIcon, PinIcon, HashIcon, SlidersIcon } from './icons';
+import { message } from './message';
 
 interface SidebarProps {
   width: number;
@@ -17,10 +19,15 @@ interface ContextMenu {
   node: TagTreeNode;
 }
 
+function reportTagError(error: unknown) {
+  message.error(parseAppError(error).message);
+}
+
 function Sidebar({ width, onResizeStart, onSearchClick, onSettingsClick }: SidebarProps) {
   const { t } = useTranslation();
-  const { state, setViewMode, deleteTag, renameTag, togglePinTag, reorderTags } = useApp();
-  const { viewMode, tags, selectedTagId } = state;
+  const { setViewMode, deleteTag, renameTag, togglePinTag, reorderTags } = useAppActions();
+  const { viewMode, selectedTagId } = useNoteView();
+  const tags = useTags();
 
   const tagTree = useMemo(() => buildTagTree(tags), [tags]);
 
@@ -44,7 +51,7 @@ function Sidebar({ width, onResizeStart, onSearchClick, onSettingsClick }: Sideb
       const ti = ids.indexOf(targetId);
       if (ti === -1) return;
       ids.splice(before ? ti : ti + 1, 0, id);
-      reorderTags(ids);
+      void reorderTags(ids).catch(reportTagError);
     },
     [dragId, reorderTags],
   );
@@ -62,18 +69,18 @@ function Sidebar({ width, onResizeStart, onSearchClick, onSettingsClick }: Sideb
     setContextMenu({ x: e.clientX, y: e.clientY, node });
   }, []);
 
-  const handleDelete = useCallback(async () => {
+  const handleDelete = useCallback(() => {
     if (!contextMenu) return;
     const { node } = contextMenu;
     setContextMenu(null);
-    await deleteTag(node.id);
+    void deleteTag(node.id).catch(reportTagError);
   }, [contextMenu, deleteTag]);
 
-  const handleTogglePin = useCallback(async () => {
+  const handleTogglePin = useCallback(() => {
     if (!contextMenu) return;
     const { node } = contextMenu;
     setContextMenu(null);
-    await togglePinTag(node.id);
+    void togglePinTag(node.id).catch(reportTagError);
   }, [contextMenu, togglePinTag]);
 
   const handleStartRename = useCallback(() => {
@@ -84,14 +91,14 @@ function Sidebar({ width, onResizeStart, onSearchClick, onSettingsClick }: Sideb
   }, [contextMenu]);
 
   const handleRenameSubmit = useCallback(
-    async (node: TagTreeNode) => {
+    (node: TagTreeNode) => {
       const trimmed = editingName.trim();
       if (trimmed && trimmed !== node.name) {
         // For nested tags, rebuild full name
         const parts = node.fullName.split('/');
         parts[parts.length - 1] = trimmed;
         const newFullName = parts.join('/');
-        await renameTag(node.id, newFullName);
+        void renameTag(node.id, newFullName).catch(reportTagError);
       }
       setEditingTagId(null);
       setEditingName('');
@@ -269,11 +276,13 @@ function TagTreeList({
                 draggable
                 onDragStart={(e) => {
                   e.dataTransfer.effectAllowed = 'move';
+                  e.dataTransfer.setData('application/x-fish-notes-tag', node.id);
                   onDragStart(node.id);
                 }}
                 onDragOver={(e) => {
                   if (!sameGroup || node.id === dragId) return;
                   e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
                   const rect = e.currentTarget.getBoundingClientRect();
                   const before = e.clientY < rect.top + rect.height / 2;
                   onDragOverNode({ id: node.id, before });

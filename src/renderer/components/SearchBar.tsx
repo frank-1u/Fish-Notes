@@ -1,6 +1,8 @@
+import { api, parseAppError, type SearchResult } from '../api';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useApp } from '../contexts/AppContext';
+import { useAppActions } from '../contexts/AppContext';
+import { message } from './message';
 
 interface SearchBarProps {
   onClose: () => void;
@@ -9,32 +11,37 @@ interface SearchBarProps {
 function SearchBar({ onClose }: SearchBarProps) {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<NoteData[]>([]);
-  const { selectNote, setViewMode } = useApp();
+  const [results, setResults] = useState<SearchResult[] | null>(null);
+  const { selectNote, setViewMode } = useAppActions();
   const inputRef = useRef<HTMLInputElement>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     inputRef.current?.focus();
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
   }, []);
 
   const handleSearch = useCallback((value: string) => {
     setQuery(value);
-    if (timerRef.current) clearTimeout(timerRef.current);
-
-    if (!value.trim()) {
-      setResults([]);
-      return;
-    }
-
-    timerRef.current = setTimeout(async () => {
-      const res = await window.api.search.notes(value);
-      setResults(res);
-    }, 200);
+    setResults(null);
   }, []);
+
+  useEffect(() => {
+    if (!query.trim()) return;
+    let active = true;
+    const timer = setTimeout(() => {
+      void api.search
+        .notes(query)
+        .then((notes) => {
+          if (active) setResults(notes);
+        })
+        .catch((error: unknown) => {
+          if (active) message.error(parseAppError(error).message);
+        });
+    }, 200);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [query]);
 
   const handleSelect = useCallback(
     (noteId: string) => {
@@ -103,7 +110,7 @@ function SearchBar({ onClose }: SearchBarProps) {
         </div>
 
         {/* Results */}
-        {results.length > 0 && (
+        {results && results.length > 0 && (
           <div className="max-h-80 overflow-y-auto">
             {results.map((note) => (
               <button
@@ -114,20 +121,23 @@ function SearchBar({ onClose }: SearchBarProps) {
                 <div className="text-sm font-medium text-gray-900 truncate">
                   {note.title || t('Untitled')}
                 </div>
-                <div className="text-xs text-gray-400 mt-1 truncate">
-                  {note.content
-                    .replace(/<[^>]*>/g, '')
-                    .replace(/&nbsp;/g, ' ')
-                    .replace(/&amp;/g, '&')
-                    .trim()
-                    .slice(0, 100)}
+                <div className="text-xs text-gray-600 mt-1 line-clamp-2">
+                  {note.snippet.map((part, index) =>
+                    part.matched ? (
+                      <mark key={index} className="rounded-sm bg-yellow-200 text-inherit">
+                        {part.text}
+                      </mark>
+                    ) : (
+                      part.text
+                    ),
+                  )}
                 </div>
               </button>
             ))}
           </div>
         )}
 
-        {query && results.length === 0 && (
+        {results?.length === 0 && (
           <div className="px-4 py-8 text-center text-sm text-gray-400">
             {t('No matching notes found')}
           </div>
