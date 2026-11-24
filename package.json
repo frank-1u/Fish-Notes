@@ -14,7 +14,8 @@
     "tauri": "tauri",
     "lint": "eslint --ext .ts,.tsx .",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "check:frontend": "eslint --ext .ts,.tsx --quiet . && yarn format:check && tsc --noEmit && yarn test && vite build"
   },
   "keywords": [],
   "author": {

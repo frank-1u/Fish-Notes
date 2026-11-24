@@ -20,3 +20,9 @@
 
 - **加密笔记与 FTS5 隔离**：加密笔记的正文与标题不得进入 SQLite FTS5 索引；锁定会话必须清零内存密钥（`zeroize`）。
 - **IPC 阻塞隔离**：SQLite、加解密、文件 I/O 与网络请求不得阻塞 Tauri 主线程，统一交给后台线程/异步任务。
+
+## 前端与 WebView2 交互边界
+
+- **持久化偏好容错**：读写 `localStorage` 等浏览器存储必须使用 `try/catch`，在 `SecurityError` 或 `QuotaExceededError` 下退化为内存态，不得击穿 React 渲染树。
+- **指针拖拽生命周期隔离**：图片缩放等拖拽交互必须区分 `setPointerCapture` 与 `ownerDocument` 全局监听，不得在 `lostpointercapture` 时误取消仍由 `ownerDocument` 追踪的拖拽。
+- **固定宽度多栏面板稳定性**：多栏布局中固定宽度的侧栏/列表面板必须保留 `shrink-0`，并在折叠与展开切换后精确还原用户宽度，不得在窄窗口下被 flex 挤压变形。

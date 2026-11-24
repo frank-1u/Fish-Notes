@@ -1,17 +1,19 @@
 # Fish Notes
 
-Bear 风格的本地 Markdown 笔记应用。桌面端使用 Tauri v2 和 Rust，界面使用 React 18、TypeScript 5.7、Vite 5 与 Tailwind CSS 3。编辑器使用 CodeMirror 6，预览由 marked 和 DOMPurify 渲染。
+Bear 风格的本地 Markdown 笔记应用。桌面端使用 Tauri v2 和 Rust，界面使用 React 18、TypeScript 5.7、Vite 5 与 Tailwind CSS 3。编辑器提供 TipTap 3 所见即所得 Edit View 与 CodeMirror 6 源码 MD View，预览由 marked 和 DOMPurify 渲染。
 
 ## 开发与验证
 
-准备 Node.js 22、Yarn Classic、Rust stable 及 Clippy。准备系统依赖时，先查阅对应平台的 [Tauri 前置条件](https://v2.tauri.app/start/prerequisites/)。
+准备 Node.js 22（见 `.nvmrc`）、Yarn Classic、Rust stable 及 Clippy。准备系统依赖时，先查阅对应平台的 [Tauri 前置条件](https://v2.tauri.app/start/prerequisites/)。
 
 ```bash
 yarn install --frozen-lockfile
 yarn start                              # Tauri 开发窗口与 Vite HMR
+yarn check:frontend                     # 依次执行 eslint、format:check、tsc、yarn test、vite build
 npx eslint --ext .ts,.tsx --quiet .
 yarn format:check
 npx tsc --noEmit
+yarn test                               # Vitest + Testing Library 前端行为测试
 npx vite build
 (cd src-tauri && cargo test --locked)
 (cd src-tauri && cargo clippy --locked --all-targets -- -D warnings)
@@ -24,8 +26,10 @@ yarn make                               # 生成当前平台原生 bundle，Wind
 ```text
 src/renderer/
 ├── api/                  # 类型化 Tauri invoke 与流式 Channel
-├── components/           # 三栏布局、虚拟笔记列表、编辑器、预览、AI 和设置
+├── components/           # Layout/Sidebar/NoteList/Editor/Settings 等顶层组件
+│   └── editor/           # MarkdownEditor、CodeMirrorView、EditorToolbar、edit-view/（TipTap EditView 与 imageNodeView）
 ├── contexts/             # 笔记、标签、加密、主题及 AI 状态
+├── i18n/                 # i18next 初始化；locales/ 仅维护 zh-CN.json（英文直接以 key 作为文案）
 └── styles/               # 主题、Markdown 预览和打印样式
 src-tauri/
 ├── src/
