@@ -7,6 +7,7 @@ import { ListItem } from '@tiptap/extension-list';
 import { Paragraph } from '@tiptap/extension-paragraph';
 import { Blockquote } from '@tiptap/extension-blockquote';
 import { joinBlocks, sourceFallbacks } from './noteSource';
+import { EditImage } from './image';
 
 const FencedCode = CodeBlock.extend({
   addInputRules() {
@@ -98,6 +99,7 @@ export const editViewExtensions = [
   MarkdownListItem,
   MarkdownBold,
   MarkdownItalic,
+  EditImage,
   Shortcuts,
   ...sourceFallbacks,
 ];
