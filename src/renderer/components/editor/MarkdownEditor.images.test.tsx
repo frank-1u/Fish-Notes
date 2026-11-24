@@ -161,6 +161,39 @@ it('saves the dragged width and restores inline and standalone resized images ac
   expect(screen.getByAltText('A & B').getAttribute('src')).toBe(displayUrl);
 });
 
+it('shrinks a local WebP when the pointer leaves its resize handle before release', async () => {
+  const src = 'fish-image://f4b47198-be5f-48c5-9d97-1f7c1e508cb1.webp';
+  const { change } = await openNote(`![](${src})`);
+  const img = screen.getByRole('textbox').querySelector<HTMLImageElement>('img[src]')!;
+  expect(img.src).toBe('http://fish-image.localhost/f4b47198-be5f-48c5-9d97-1f7c1e508cb1.webp');
+  vi.spyOn(img, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 582, 1256));
+  const handle = screen.getByLabelText('Resize image');
+  fireEvent.pointerDown(handle, { button: 0, clientX: 578 });
+  fireEvent.pointerUp(handle, { clientX: 578 });
+  fireEvent.pointerDown(handle, { button: 0, clientX: 578 });
+  // WebView2 can target the image on the first move away from the handle.
+  fireEvent.pointerMove(img, { clientX: 518 });
+  expect(img.width).toBe(522);
+  expect(change).not.toHaveBeenCalled();
+  fireEvent.pointerUp(img, { clientX: 458 });
+  expect(change).toHaveBeenLastCalledWith(`<img src="${src}" alt="" width="462" />`);
+});
+
+it('restores the saved width when a resize is canceled outside the image', async () => {
+  const { change } = await openNote(
+    '<img src="fish-image://photo.webp" alt="saved" width="420" />',
+  );
+  const img = screen.getByAltText<HTMLImageElement>('saved');
+  vi.spyOn(img, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 420, 900));
+  fireEvent.pointerDown(screen.getByLabelText('Resize image'), { button: 0, clientX: 415 });
+  fireEvent.pointerMove(document.body, { clientX: 475 });
+  expect(img.width).toBe(480);
+  fireEvent.pointerCancel(document.body);
+  fireEvent.pointerUp(document.body, { clientX: 535 });
+  expect(img.width).toBe(420);
+  expect(change).not.toHaveBeenCalled();
+});
+
 it.each(['Backspace', 'Delete'])('deletes only the clicked image with %s', async (key) => {
   const { change } = await openNote('Before ![selected](fish-image://photo.png) after');
   fireEvent.click(screen.getByAltText('selected'));
