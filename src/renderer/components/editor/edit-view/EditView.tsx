@@ -6,6 +6,8 @@ import { editViewExtensions } from './extensions';
 import { createNoteSourceCodec } from './noteSource';
 import { formatters } from './commands';
 import type { NoteSourceSnapshot } from '../MarkdownEditor';
+import type { ActionSelection } from '../ActionSelection';
+import { editViewSelection, watchNativeSelection } from './selectionActions';
 
 const codec = createNoteSourceCodec(editViewExtensions);
 const languages = [
@@ -29,22 +31,23 @@ interface Props {
   defaultValue: string;
   language: string;
   onChange: (doc: NoteSourceSnapshot) => void;
+  onPolishSelection: (selection: ActionSelection | null) => void;
   focusOnMount: boolean;
   onSave?: () => void;
 }
 
 export default forwardRef<EditorCommandAdapter, Props>(function EditView(
-  { noteId, defaultValue, language, onChange, onSave, focusOnMount },
+  { noteId, defaultValue, language, onChange, onSave, onPolishSelection, focusOnMount },
   ref,
 ) {
   const { t } = useTranslation();
   const container = useRef<HTMLDivElement>(null);
   const editorRef = useRef<Editor | null>(null);
-  const callbacks = useRef({ onChange, onSave });
+  const callbacks = useRef({ onChange, onSave, onPolishSelection });
   const [codeLanguage, setCodeLanguage] = useState<string | null>(null);
   useLayoutEffect(() => {
-    callbacks.current = { onChange, onSave };
-  }, [onChange, onSave]);
+    callbacks.current = { onChange, onSave, onPolishSelection };
+  }, [onChange, onSave, onPolishSelection]);
   useImperativeHandle(
     ref,
     () => ({
@@ -87,7 +90,12 @@ export default forwardRef<EditorCommandAdapter, Props>(function EditView(
           return false;
         },
       },
-      onTransaction: ({ editor }) => showLanguage(editor),
+      onTransaction: ({ editor, transaction }) => {
+        showLanguage(editor);
+        if (transaction.selectionSet || transaction.docChanged) {
+          callbacks.current.onPolishSelection(editViewSelection(editor, codec));
+        }
+      },
       onUpdate: ({ editor }) => {
         // Hold the immutable document for this edit. The 500 ms save, export or
         // a mode switch reads it lazily, even if another note is open by then.
@@ -97,9 +105,13 @@ export default forwardRef<EditorCommandAdapter, Props>(function EditView(
       },
     });
     editorRef.current = editor;
+    const stopWatching = watchNativeSelection(editor, (inside) =>
+      callbacks.current.onPolishSelection(inside ? editViewSelection(editor, codec) : null),
+    );
     showLanguage(editor);
     if (focusOnMount) editor.view.focus();
     return () => {
+      stopWatching();
       editorRef.current = null;
       editor.destroy();
     };

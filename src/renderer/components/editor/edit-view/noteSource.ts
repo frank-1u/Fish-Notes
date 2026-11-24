@@ -3,6 +3,7 @@ import { MarkdownManager } from '@tiptap/markdown';
 import { Lexer, Marked, type Token, type marked } from 'marked';
 import type { Node as DocumentNode } from '@tiptap/pm/model';
 import type { Extensions } from '@tiptap/core';
+import { HashtagLiteral, literalHashtagNames } from './hashtagMarkdown';
 
 // Unsupported Markdown remains literal and editable in MD View. Never feed
 // arbitrary note HTML into the rich editor or discard it on an unrelated edit.
@@ -132,7 +133,7 @@ class NoteSourceMarkdown extends MarkdownManager {
     let start = 0;
     const append = (end: number) => {
       const run = start === 0 && end === nodes.length ? nodes : nodes.slice(start, end);
-      const text = super.renderNodes(run, parent, separator, index, level);
+      const text = super.renderNodes(literalHashtagNames(run), parent, separator, index, level);
       result += result.endsWith('_')
         ? text.replace(/^./u, (letter) => `&#${letter.codePointAt(0)};`)
         : text;
@@ -161,7 +162,7 @@ export function createNoteSourceCodec(extensions: Extensions) {
   lexer.Lexer = NoteSourceLexer;
   const markdown = new NoteSourceMarkdown({
     marked: lexer as unknown as typeof marked,
-    extensions,
+    extensions: [...extensions, HashtagLiteral],
   });
   return {
     parse: (source: string) => markdown.parse(source),

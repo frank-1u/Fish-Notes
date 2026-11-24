@@ -1,16 +1,16 @@
 import { api } from '../../api';
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import SelectionActionBubble from './SelectionActionBubble';
+import type { ActionSelection } from './ActionSelection';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
-import CodeMirrorView, { type CodeMirrorHandle, type PolishSelectionInfo } from './CodeMirrorView';
+import CodeMirrorView, { type CodeMirrorHandle } from './CodeMirrorView';
 import { supportsEditFormat } from './edit-view/commands';
 import type { EditorCommandAdapter } from './EditorCommandAdapter';
 import EditorToolbar from './EditorToolbar';
 import PolishDialog from './PolishDialog';
 import type { AppTheme } from './extensions/themes';
 import { useAssistantEntryPoints } from '../../contexts/AssistantContext';
-import { RobotIcon } from '../icons';
 import { message } from '../message';
 
 const EditView = lazy(() => import('./edit-view/EditView'));
@@ -96,80 +96,26 @@ export default function MarkdownEditor({
   }
   const showToolbar = showToolbarProp ?? toolbarVisible;
 
-  // Polish bubble state
-  const [polishSel, setPolishSel] = useState<PolishSelectionInfo | null>(null);
-  const [bubblePos, setBubblePos] = useState<{
-    top: number;
-    left: number;
-    placement: 'above' | 'below';
-  } | null>(null);
+  const [polishSel, setPolishSel] = useState<ActionSelection | null>(null);
   const [polishDialog, setPolishDialog] = useState<{
-    from: number;
-    to: number;
+    selection: ActionSelection;
     original: string;
     polished: string | null;
     loading: boolean;
     error: string | null;
   } | null>(null);
 
-  // Recompute bubble position whenever selection changes or editor scrolls/resizes.
-  useEffect(() => {
-    if (!polishSel) {
-      setBubblePos(null);
-      return;
-    }
-    const view = editorRef.current?.view;
-    if (!view) return;
-
-    const update = () => {
-      const v = editorRef.current?.view;
-      if (!v) return;
-      const startCoords = v.coordsAtPos(polishSel.from);
-      const endCoords = v.coordsAtPos(polishSel.to);
-      if (!startCoords || !endCoords) {
-        setBubblePos(null);
-        return;
-      }
-      // Clip horizontal anchor inside the editor's visible rect — when the selection
-      // spans many lines, end is on a different line and using its left/right blindly
-      // would yank the bubble off to the side.
-      const editorRect = v.dom.getBoundingClientRect();
-      const anchorTop = Math.min(startCoords.top, endCoords.top);
-      const anchorBottom = Math.max(startCoords.bottom, endCoords.bottom);
-      const sameLine = Math.abs(startCoords.top - endCoords.top) < 4;
-      const left = sameLine
-        ? (startCoords.left + endCoords.right) / 2
-        : (editorRect.left + editorRect.right) / 2;
-      // Flip below when not enough room above (e.g. toolbar covers the top).
-      const BUBBLE_SAFE = 44;
-      const placement: 'above' | 'below' =
-        anchorTop - BUBBLE_SAFE < editorRect.top ? 'below' : 'above';
-      const top = placement === 'above' ? anchorTop - 8 : anchorBottom + 8;
-      setBubblePos({ top, left, placement });
-    };
-
-    update();
-    const scroller = view.scrollDOM;
-    scroller.addEventListener('scroll', update);
-    window.addEventListener('resize', update);
-    return () => {
-      scroller.removeEventListener('scroll', update);
-      window.removeEventListener('resize', update);
-    };
-  }, [polishSel]);
-
-  const runPolish = useCallback(async (info: { from: number; to: number; text: string }) => {
+  const runPolish = useCallback(async (selection: ActionSelection) => {
     const request = {
-      from: info.from,
-      to: info.to,
-      original: info.text,
+      selection,
+      original: selection.getMarkdown(),
       polished: null,
       loading: true,
       error: null,
     };
     setPolishDialog(request);
     try {
-      const polished = await api.ai.polishText(info.text);
+      const polished = await api.ai.polishText(request.original);
       setPolishDialog((current) =>
         current === request ? { ...request, polished, loading: false } : current,
       );
@@ -186,45 +132,12 @@ export default function MarkdownEditor({
     }
   }, []);
 
-  const handlePolishClick = useCallback(() => {
-    if (!polishSel) return;
-    const captured = polishSel;
-    setPolishSel(null);
-    setBubblePos(null);
-    runPolish(captured);
-  }, [polishSel, runPolish]);
-
-  const handleApplyPolish = useCallback(
-    (polishedText: string) => {
-      const view = editorRef.current?.view;
-      const dialog = polishDialog;
-      if (!view || !dialog) {
-        setPolishDialog(null);
-        return;
-      }
-      if (
-        dialog.to > view.state.doc.length ||
-        view.state.sliceDoc(dialog.from, dialog.to) !== dialog.original
-      ) {
-        message.warning(t('The selected text changed. Select it again to polish it.'));
-        setPolishDialog(null);
-        return;
-      }
-      // Replace the original range with polished text.
-      view.dispatch({
-        changes: { from: dialog.from, to: dialog.to, insert: polishedText },
-        selection: { anchor: dialog.from + polishedText.length },
-      });
-      view.focus();
-      setPolishDialog(null);
-    },
-    [polishDialog, t],
-  );
-
-  const handleRetryPolish = useCallback(() => {
-    if (!polishDialog) return;
-    runPolish({ from: polishDialog.from, to: polishDialog.to, text: polishDialog.original });
-  }, [polishDialog, runPolish]);
+  const handleApplyPolish = (markdown: string) => {
+    if (polishDialog && !polishDialog.selection.replaceMarkdown(markdown)) {
+      message.warning(t('The selected text changed. Select it again to polish it.'));
+    }
+    setPolishDialog(null);
+  };
 
   const updateMode = useCallback(
     (next: EditorMode) => {
@@ -258,7 +171,6 @@ export default function MarkdownEditor({
   }, [noteId, defaultValue]);
   useLayoutEffect(() => {
     setPolishSel(null);
-    setBubblePos(null);
     setPolishDialog(null);
   }, [noteId, defaultValue, mode]);
 
@@ -316,6 +228,7 @@ export default function MarkdownEditor({
               defaultValue={entry.source}
               onChange={handleChange}
               onSave={onSave}
+              onPolishSelection={setPolishSel}
               language={language}
               focusOnMount={entry.focusOnMount}
             />
@@ -337,54 +250,19 @@ export default function MarkdownEditor({
         </div>
       )}
 
-      {polishSel &&
-        bubblePos &&
-        createPortal(
-          <div
-            className="fixed z-[9999] flex items-center gap-1.5"
-            style={{
-              top: bubblePos.top,
-              left: bubblePos.left,
-              transform:
-                bubblePos.placement === 'above' ? 'translate(-50%, -100%)' : 'translate(-50%, 0)',
-            }}
-          >
-            <button
-              type="button"
-              onMouseDown={(e) => {
-                // Prevent the editor from losing selection before our click handler fires.
-                e.preventDefault();
-              }}
-              onClick={handlePolishClick}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-full shadow-lg text-xs font-medium transition-transform hover:scale-105"
-              style={{ backgroundColor: '#f97316', color: 'white' }}
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
-                />
-              </svg>
-              {t('AI polish')}
-            </button>
-            <button
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                const text = polishSel.text;
-                setPolishSel(null);
-                askWithSelection(text);
-              }}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-full shadow-lg text-xs font-medium transition-transform hover:scale-105"
-              style={{ backgroundColor: 'var(--text-primary)', color: 'var(--bg-primary)' }}
-            >
-              <RobotIcon size={14} /> {t('Ask Fish about selection')}
-            </button>
-          </div>,
-          document.body,
-        )}
+      {polishSel && !polishDialog && (
+        <SelectionActionBubble
+          selection={polishSel}
+          onAsk={() => {
+            askWithSelection(polishSel.text);
+            setPolishSel(null);
+          }}
+          onPolish={() => {
+            void runPolish(polishSel);
+            setPolishSel(null);
+          }}
+        />
+      )}
 
       {polishDialog && (
         <PolishDialog
@@ -394,7 +272,7 @@ export default function MarkdownEditor({
           polished={polishDialog.polished}
           onAccept={handleApplyPolish}
           onClose={() => setPolishDialog(null)}
-          onRetry={handleRetryPolish}
+          onRetry={() => void runPolish(polishDialog.selection)}
         />
       )}
     </div>

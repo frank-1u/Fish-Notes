@@ -7,6 +7,7 @@ import { ListItem } from '@tiptap/extension-list';
 import { Paragraph } from '@tiptap/extension-paragraph';
 import { Blockquote } from '@tiptap/extension-blockquote';
 import { joinBlocks, sourceFallbacks } from './noteSource';
+import { InlineHashtags } from './inlineHashtags';
 
 const FencedCode = CodeBlock.extend({
   addInputRules() {
@@ -99,5 +100,6 @@ export const editViewExtensions = [
   MarkdownBold,
   MarkdownItalic,
   Shortcuts,
+  InlineHashtags,
   ...sourceFallbacks,
 ];

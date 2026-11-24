@@ -17,7 +17,8 @@ import type { EditorCommandAdapter, FormatCommand } from './EditorCommandAdapter
 import { createEditorTheme, type AppTheme } from './extensions/themes';
 import { smartListKeymap } from './extensions/smartTyping';
 import { imageHandling } from './extensions/imageHandling';
-import { polishBubbleExtension, type PolishSelectionInfo } from './extensions/polishBubble';
+import { polishBubbleExtension } from './extensions/polishBubble';
+import type { ActionSelection } from './ActionSelection';
 import {
   toggleBold,
   toggleItalic,
@@ -56,14 +57,12 @@ export interface CodeMirrorHandle extends EditorCommandAdapter {
   focus: () => void;
 }
 
-export type { PolishSelectionInfo };
-
 interface CodeMirrorViewProps {
   noteId: string | null;
   defaultValue: string;
   onChange: (doc: Text) => void;
   onSave?: () => void;
-  onPolishSelection?: (sel: PolishSelectionInfo | null) => void;
+  onPolishSelection?: (sel: ActionSelection | null) => void;
   theme: AppTheme;
   language: string;
   className?: string;
