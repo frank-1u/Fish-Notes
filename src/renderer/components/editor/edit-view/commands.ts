@@ -3,6 +3,7 @@ import type { FormatCommand } from '../EditorCommandAdapter';
 import { chooseImage } from './imageUploads';
 
 export const formatters: Partial<Record<FormatCommand, (editor: Editor) => void>> = {
+  toggleTaskList: (editor) => editor.chain().focus().toggleTaskItem().run(),
   insertImage: chooseImage,
   toggleBold: (editor) => editor.chain().focus().toggleBold().run(),
   toggleItalic: (editor) => editor.chain().focus().toggleItalic().run(),
@@ -15,5 +16,5 @@ export const formatters: Partial<Record<FormatCommand, (editor: Editor) => void>
   insertDivider: (editor) => editor.chain().focus().setHorizontalRule().run(),
 };
 export function supportsEditFormat(command: FormatCommand | 'insertTable') {
-  return command in formatters;
+  return command === 'insertTable' || command === 'insertLink' || command in formatters;
 }

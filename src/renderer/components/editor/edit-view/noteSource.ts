@@ -1,6 +1,6 @@
 import { Node, type JSONContent } from '@tiptap/core';
 import { MarkdownManager } from '@tiptap/markdown';
-import { Lexer, Marked, type Token, type marked } from 'marked';
+import { Lexer, Marked, type Token, type Tokens, type marked } from 'marked';
 import type { Node as DocumentNode } from '@tiptap/pm/model';
 import type { Extensions } from '@tiptap/core';
 import { HashtagLiteral, literalHashtagNames } from './hashtagMarkdown';
@@ -40,6 +40,15 @@ function separatorBefore(type: string | undefined, inListItem: boolean) {
   return inListItem && (type === 'list' || type === 'bulletList' || type === 'orderedList') ? 1 : 2;
 }
 
+function taskMarker(item: Tokens.ListItem) {
+  // Marked trims a trailing space at EOF, so a fresh empty task has no
+  // checkbox token until the user gives it a label.
+  if (item.task)
+    return { checked: !!item.checked, tokens: item.tokens.filter((t) => t.type !== 'checkbox') };
+  const empty = /^\[([ xX])\]$/.exec(item.text);
+  if (empty) return { checked: empty[1].toLowerCase() === 'x', tokens: [] };
+}
+
 function blockTokens(tokens: Token[], inListItem = false): Token[] {
   const result: Token[] = [];
   let lineBreaks = 0;
@@ -64,10 +73,18 @@ function blockTokens(tokens: Token[], inListItem = false): Token[] {
           ? { type: 'paragraph', raw, text: raw, tokens: inline }
           : { type: 'sourceBlock', raw },
       );
-    } else if (
-      ['table', 'def', 'html'].includes(token.type) ||
-      (token.type === 'list' && token.items.some((item: { task?: boolean }) => item.task))
-    ) {
+    } else if (token.type === 'table') {
+      const cellTokens = (cell: Tokens.TableCell) => ({
+        ...cell,
+        tokens: inlineTokens(cell.tokens),
+      });
+      result.push({
+        ...token,
+        raw,
+        header: token.header.map(cellTokens),
+        rows: token.rows.map((row: Tokens.TableCell[]) => row.map(cellTokens)),
+      });
+    } else if (['def', 'html'].includes(token.type)) {
       result.push({ type: 'sourceBlock', raw });
     } else if (token.type === 'blockquote') {
       result.push({ ...token, raw, tokens: blockTokens(token.tokens ?? []) });
@@ -75,10 +92,17 @@ function blockTokens(tokens: Token[], inListItem = false): Token[] {
       result.push({
         ...token,
         raw,
-        items: token.items.map((item: Token) => ({
-          ...item,
-          tokens: 'tokens' in item && item.tokens ? blockTokens(item.tokens, true) : [],
-        })),
+        items: token.items.map((item: Tokens.ListItem) => {
+          const task = taskMarker(item);
+          return task
+            ? {
+                ...item,
+                type: 'taskItem',
+                checked: task.checked,
+                tokens: blockTokens(task.tokens, true),
+              }
+            : { ...item, tokens: blockTokens(item.tokens, true) };
+        }),
       });
     } else if ('tokens' in token && token.tokens) {
       result.push({
@@ -101,6 +125,10 @@ class NoteSourceLexer<ParserOutput = string, RendererOutput = string> extends Le
 > {
   lex(source: string) {
     const tokens = super.lex(source);
+    // Marked may replace the final space of a list item with a synthetic
+    // newline. Only actual source line endings become blank paragraphs.
+    const last = tokens.at(-1);
+    if (last?.type === 'list' && !/[\r\n]$/.test(source)) last.raw = last.raw.replace(/\n+$/, '');
     return Object.assign(blockTokens(tokens), { links: tokens.links });
   }
 }

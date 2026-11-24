@@ -1,6 +1,6 @@
 import type { Editor } from '@tiptap/core';
 import { Slice, type Fragment } from '@tiptap/pm/model';
-import { NodeSelection } from '@tiptap/pm/state';
+import { AllSelection, TextSelection } from '@tiptap/pm/state';
 import { minimumSelectionLength, type ActionSelection } from '../ActionSelection';
 import type { createNoteSourceCodec } from './noteSource';
 
@@ -54,7 +54,12 @@ export function editViewSelection(
   codec: ReturnType<typeof createNoteSourceCodec>,
 ): ActionSelection | null {
   const { doc, selection } = editor.state;
-  if (selection.empty || selection instanceof NodeSelection) return null;
+  if (
+    selection.empty ||
+    !(selection instanceof TextSelection || selection instanceof AllSelection)
+  ) {
+    return null;
+  }
   const { from, to } = selection;
   const text = doc.textBetween(from, to, '\n', (node) =>
     node.type.name === 'hardBreak' ? '\n' : '',

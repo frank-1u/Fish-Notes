@@ -1,0 +1,71 @@
+.edit-view li[data-checked] {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35em;
+  list-style: none;
+}
+.edit-view li[data-checked] > label {
+  flex: none;
+}
+.edit-view li[data-checked] > div {
+  flex: 1;
+  min-width: 0;
+}
+.edit-view li[data-checked] > div > p:first-child,
+.edit-view :is(th, td) > p {
+  margin: 0;
+}
+.edit-block-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  background-color: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+.edit-block-controls button {
+  border-radius: 0.25rem;
+  padding: 0.2rem 0.45rem;
+}
+.edit-block-controls button:hover,
+.edit-block-controls button:focus-visible {
+  color: var(--text-primary);
+  background: var(--accent-soft-bg);
+}
+.edit-block-controls button:disabled {
+  opacity: 0.45;
+}
+.edit-link-popover {
+  position: fixed;
+  z-index: 1000;
+  max-width: calc(100vw - 8px);
+  padding: 0.25rem;
+  border: 1px solid var(--border-primary);
+  border-radius: 0.5rem;
+  background: var(--card-bg);
+  color: var(--text-primary);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.15);
+  font-size: 0.8rem;
+}
+.edit-link-popover .edit-block-controls {
+  background: transparent;
+}
+.edit-link-popover form {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.4rem;
+}
+.edit-link-popover label {
+  display: grid;
+  gap: 0.2rem;
+}
+.edit-link-popover input {
+  min-width: 0;
+  width: min(17rem, 75vw);
+  padding: 0.2rem 0.4rem;
+  border: 1px solid var(--border-primary);
+  border-radius: 0.25rem;
+  background: var(--bg-primary);
+}

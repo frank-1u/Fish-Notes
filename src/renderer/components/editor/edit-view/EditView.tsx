@@ -1,9 +1,21 @@
+import './interactive.css';
 import { Editor } from '@tiptap/core';
-import { forwardRef, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
+import { isInTable } from '@tiptap/pm/tables';
+import {
+  forwardRef,
+  useCallback,
+  useImperativeHandle,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import type { EditorCommandAdapter } from '../EditorCommandAdapter';
 import { editViewExtensions } from './extensions';
 import { createNoteSourceCodec } from './noteSource';
+import { openExternalLink } from '../externalLinks';
+import { linkTarget, LinkPopover, type LinkTarget } from './LinkPopover';
+import { TableControls } from './TableControls';
 import { formatters } from './commands';
 import type { NoteSourceSnapshot } from '../MarkdownEditor';
 import type { ActionSelection } from '../ActionSelection';
@@ -44,6 +56,9 @@ export default forwardRef<EditorCommandAdapter, Props>(function EditView(
   const container = useRef<HTMLDivElement>(null);
   const editorRef = useRef<Editor | null>(null);
   const callbacks = useRef({ onChange, onSave, onPolishSelection });
+  const [link, setLink] = useState<LinkTarget | null>(null);
+  const closeLink = useCallback(() => setLink(null), []);
+  const [tableEditor, setTableEditor] = useState<Editor | null>(null);
   const [codeLanguage, setCodeLanguage] = useState<string | null>(null);
   useLayoutEffect(() => {
     callbacks.current = { onChange, onSave, onPolishSelection };
@@ -52,7 +67,13 @@ export default forwardRef<EditorCommandAdapter, Props>(function EditView(
     ref,
     () => ({
       format(command) {
-        if (editorRef.current) formatters[command]?.(editorRef.current);
+        const editor = editorRef.current;
+        if (!editor) return;
+        if (command === 'insertLink') setLink(linkTarget(editor));
+        else formatters[command]?.(editor);
+      },
+      insertTable(rows, columns) {
+        editorRef.current?.chain().focus().insertTable({ rows, cols: columns }).run();
       },
       toggleHeading(level) {
         editorRef.current?.chain().focus().toggleHeading({ level }).run();
@@ -63,10 +84,12 @@ export default forwardRef<EditorCommandAdapter, Props>(function EditView(
 
   useLayoutEffect(() => {
     if (!noteId || !container.current) return;
-    const showLanguage = (editor: Editor) =>
+    const showControls = (editor: Editor) => {
+      setTableEditor(isInTable(editor.state) ? editor : null);
       setCodeLanguage(
         editor.isActive('codeBlock') ? (editor.getAttributes('codeBlock').language ?? '') : null,
       );
+    };
     const editor = new Editor({
       element: container.current,
       extensions: editViewExtensions,
@@ -77,7 +100,30 @@ export default forwardRef<EditorCommandAdapter, Props>(function EditView(
           'aria-multiline': 'true',
           class: 'markdown-preview edit-view',
         },
+        handleDOMEvents: {
+          click: (_view, event) => {
+            const anchor = event.target instanceof Element && event.target.closest('a');
+            if (!anchor || event.button !== 0) return false;
+            event.preventDefault();
+            if (event.ctrlKey || event.metaKey) {
+              setLink(null);
+              openExternalLink(anchor.getAttribute('href')?.trim() ?? '');
+            } else {
+              setLink(linkTarget(editor, anchor));
+            }
+            return true;
+          },
+        },
         handleKeyDown: (_view, event) => {
+          if (
+            (event.ctrlKey || event.metaKey) &&
+            event.key.toLowerCase() === 'k' &&
+            !event.altKey &&
+            !event.shiftKey
+          ) {
+            setLink(linkTarget(editor));
+            return true;
+          }
           if (
             (event.ctrlKey || event.metaKey) &&
             event.key.toLowerCase() === 's' &&
@@ -91,12 +137,13 @@ export default forwardRef<EditorCommandAdapter, Props>(function EditView(
         },
       },
       onTransaction: ({ editor, transaction }) => {
-        showLanguage(editor);
+        showControls(editor);
         if (transaction.selectionSet || transaction.docChanged) {
           callbacks.current.onPolishSelection(editViewSelection(editor, codec));
         }
       },
       onUpdate: ({ editor }) => {
+        setLink(null);
         // Hold the immutable document for this edit. The 500 ms save, export or
         // a mode switch reads it lazily, even if another note is open by then.
         const doc = editor.state.doc;
@@ -108,7 +155,8 @@ export default forwardRef<EditorCommandAdapter, Props>(function EditView(
     const stopWatching = watchNativeSelection(editor, (inside) =>
       callbacks.current.onPolishSelection(inside ? editViewSelection(editor, codec) : null),
     );
-    showLanguage(editor);
+    setLink(null);
+    showControls(editor);
     if (focusOnMount) editor.view.focus();
     return () => {
       stopWatching();
@@ -122,6 +170,14 @@ export default forwardRef<EditorCommandAdapter, Props>(function EditView(
 
   return (
     <div className="flex flex-1 flex-col min-h-0">
+      {link && (
+        <LinkPopover
+          key={`${link.from}-${link.to}-${!!link.anchor}`}
+          target={link}
+          onClose={closeLink}
+        />
+      )}
+      {tableEditor && <TableControls editor={tableEditor} />}
       {noteId && codeLanguage !== null && (
         <label className="edit-code-language">
           {t('Code language')}
