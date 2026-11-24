@@ -1,8 +1,8 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, type ReactNode } from 'react';
 import { api, AppError, parseAppError, type NoteData } from '../api';
 import Sidebar from './Sidebar';
 import NoteList from './NoteList';
-import Editor from './Editor';
+import Editor, { PaneToggles } from './Editor';
 import SearchBar from './SearchBar';
 import Settings from './Settings';
 import { useAppActions, useNoteSelection, useSelectedNoteLocked } from '../contexts/AppContext';
@@ -12,7 +12,17 @@ const SIDEBAR_MAX = 350;
 const NOTELIST_MIN = 200;
 const NOTELIST_MAX = 450;
 
+function usePaneVisibility(storageKey: string) {
+  const [visible, setVisible] = useState(() => localStorage.getItem(storageKey) !== 'false');
+  useEffect(() => {
+    localStorage.setItem(storageKey, String(visible));
+  }, [storageKey, visible]);
+  return [visible, () => setVisible((previous) => !previous)] as const;
+}
+
 function Layout() {
+  const [sidebarVisible, toggleSidebar] = usePaneVisibility('fish-notes:sidebar-visible');
+  const [noteListVisible, toggleNoteList] = usePaneVisibility('fish-notes:note-list-visible');
   const [sidebarWidth, setSidebarWidth] = useState(220);
   const [noteListWidth, setNoteListWidth] = useState(280);
   const [showSearch, setShowSearch] = useState(false);
@@ -108,21 +118,34 @@ function Layout() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden">
-      <Sidebar
-        width={sidebarWidth}
-        onResizeStart={handleSidebarMouseDown}
-        onSearchClick={openSearch}
-        onSettingsClick={openSettings}
+      {sidebarVisible && (
+        <Sidebar
+          width={sidebarWidth}
+          onResizeStart={handleSidebarMouseDown}
+          onSearchClick={openSearch}
+          onSettingsClick={openSettings}
+        />
+      )}
+      {noteListVisible && (
+        <NoteList width={noteListWidth} onResizeStart={handleNoteListMouseDown} />
+      )}
+      <SelectedNoteEditor
+        headerStart={
+          <PaneToggles
+            sidebarVisible={sidebarVisible}
+            noteListVisible={noteListVisible}
+            onToggleSidebar={toggleSidebar}
+            onToggleNoteList={toggleNoteList}
+          />
+        }
       />
-      <NoteList width={noteListWidth} onResizeStart={handleNoteListMouseDown} />
-      <SelectedNoteEditor />
       {showSearch && <SearchBar onClose={closeSearch} />}
       {showSettings && <Settings onClose={closeSettings} />}
     </div>
   );
 }
 
-function SelectedNoteEditor() {
+function SelectedNoteEditor({ headerStart }: { headerStart: ReactNode }) {
   const { updateNoteContent } = useAppActions();
   const { selectedNoteId } = useNoteSelection();
   const isLocked = useSelectedNoteLocked();
@@ -158,6 +181,7 @@ function SelectedNoteEditor() {
 
   return (
     <Editor
+      headerStart={headerStart}
       noteId={current?.data?.id ?? null}
       title={current?.data?.title ?? ''}
       content={current?.data?.content ?? ''}

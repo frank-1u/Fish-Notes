@@ -1,8 +1,16 @@
 # Fish Notes
 
-这份术语表约定了正文、编辑视图和选区操作在需求、代码与测试中的名称。
+这份术语表约定了布局面板、正文、编辑视图和选区操作在需求、代码与测试中的名称。
 
 ## Language
+
+**Navigation Sidebar**（导航侧栏）是最左侧的 `Sidebar` 面板，提供搜索、所有笔记、回收站、标签和设置入口。
+
+_Avoid_：Note List、笔记侧栏。
+
+**Note List**（笔记列表）是 `NoteList` 面板，列出当前视图或标签下的笔记，供用户选择并在编辑区打开。
+
+_Avoid_：Navigation Sidebar、导航列表。
 
 **Note Source** 是每篇笔记唯一的 Markdown 正文。两种视图都读写这份正文，连续空行也是正文的一部分。
 

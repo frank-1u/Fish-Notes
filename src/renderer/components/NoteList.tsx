@@ -203,8 +203,9 @@ function NoteList({ width, onResizeStart }: NoteListProps) {
   const contextNote = contextMenu ? getNoteSummary(contextMenu.noteId) : null;
 
   return (
-    <div
-      className="relative flex flex-col no-select shrink-0 transition-colors"
+    <section
+      aria-label={t('Note List')}
+      className="relative flex flex-col no-select min-w-0 transition-colors"
       style={{
         width,
         backgroundColor: 'var(--bg-primary)',
@@ -213,7 +214,8 @@ function NoteList({ width, onResizeStart }: NoteListProps) {
     >
       {/* Header */}
       <div
-        className="h-12 flex items-center justify-between px-4 shrink-0"
+        className="fn-pane-header h-12 flex items-center justify-between px-4 shrink-0"
+        data-tauri-drag-region={navigator.userAgent.includes('Macintosh') ? true : undefined}
         style={{ borderBottom: '1px solid var(--border-secondary)' }}
       >
         <span className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
@@ -275,6 +277,8 @@ function NoteList({ width, onResizeStart }: NoteListProps) {
 
       {/* Resize handle */}
       <div
+        role="separator"
+        aria-orientation="vertical"
         className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400/50 transition-colors"
         onMouseDown={onResizeStart}
       />
@@ -342,7 +346,7 @@ function NoteList({ width, onResizeStart }: NoteListProps) {
           </div>
         </div>
       )}
-    </div>
+    </section>
   );
 }
 

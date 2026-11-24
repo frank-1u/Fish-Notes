@@ -107,8 +107,9 @@ function Sidebar({ width, onResizeStart, onSearchClick, onSettingsClick }: Sideb
   );
 
   return (
-    <div
-      className="relative flex flex-col no-select shrink-0 transition-colors"
+    <nav
+      aria-label={t('Navigation Sidebar')}
+      className="relative flex flex-col no-select min-w-0 transition-colors"
       style={{
         width,
         backgroundColor: 'var(--bg-secondary)',
@@ -202,6 +203,8 @@ function Sidebar({ width, onResizeStart, onSearchClick, onSettingsClick }: Sideb
 
       {/* Resize handle */}
       <div
+        role="separator"
+        aria-orientation="vertical"
         className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400/50 transition-colors"
         onMouseDown={onResizeStart}
       />
@@ -217,7 +220,7 @@ function Sidebar({ width, onResizeStart, onSearchClick, onSettingsClick }: Sideb
           onDelete={handleDelete}
         />
       )}
-    </div>
+    </nav>
   );
 }
 

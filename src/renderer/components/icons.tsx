@@ -37,6 +37,24 @@ function Icon({
   );
 }
 
+export function NavigationSidebarIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M9 4v16" />
+    </Icon>
+  );
+}
+
+export function NoteListIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M7 9h10M7 12h10M7 15h7" />
+    </Icon>
+  );
+}
+
 export function NotesIcon(props: IconProps) {
   return (
     <Icon {...props}>
