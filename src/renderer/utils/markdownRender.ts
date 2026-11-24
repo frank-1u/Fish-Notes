@@ -5,7 +5,7 @@ import { marked } from 'marked';
 // Allow http(s)/mailto/tel links and our own fish-image: scheme; strip everything else
 // (javascript:, inline event handlers, <script>, etc.) from rendered note content.
 const SANITIZE_CONFIG = {
-  ADD_ATTR: ['target', 'rel'],
+  ADD_ATTR: ['target', 'rel', 'width'],
   ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel|fish-image):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$)|#)/i,
 };
 
@@ -49,7 +49,16 @@ function preserveBlankLines(md: string): string {
 }
 
 export function fishImageName(image: HTMLImageElement): string | undefined {
-  return image.getAttribute('src')?.match(/^fish-image:\/\/([^/?#]+)$/i)?.[1];
+  return localImageName(image.getAttribute('src') ?? '');
+}
+
+function localImageName(src: string): string | undefined {
+  return src.match(/^fish-image:\/\/([^/?#]+)$/i)?.[1];
+}
+
+export function imageDisplayUrl(src: string): string {
+  const name = localImageName(src);
+  return name ? convertFileSrc(name, 'fish-image') : src;
 }
 
 export function renderMarkdown(markdown: string): DocumentFragment {
@@ -90,8 +99,7 @@ export function renderPreview(markdown: string): string {
   const template = document.createElement('template');
   template.content.append(renderMarkdown(markdown));
   for (const image of template.content.querySelectorAll<HTMLImageElement>('img[src]')) {
-    const name = fishImageName(image);
-    if (name) image.setAttribute('src', convertFileSrc(name, 'fish-image'));
+    image.setAttribute('src', imageDisplayUrl(image.getAttribute('src')!));
   }
   return template.innerHTML;
 }

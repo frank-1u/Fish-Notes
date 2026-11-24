@@ -4,6 +4,7 @@ import { Lexer, Marked, type Token, type marked } from 'marked';
 import type { Node as DocumentNode } from '@tiptap/pm/model';
 import type { Extensions } from '@tiptap/core';
 import { HashtagLiteral, literalHashtagNames } from './hashtagMarkdown';
+import { resizedImageToken } from './image';
 
 // Unsupported Markdown remains literal and editable in MD View. Never feed
 // arbitrary note HTML into the rich editor or discard it on an unrelated edit.
@@ -24,7 +25,10 @@ export const sourceFallbacks = [sourceNode('sourceBlock', false), sourceNode('so
 
 function inlineTokens(tokens: Token[]): Token[] {
   return tokens.map((token) => {
-    if (['image', 'html', 'checkbox'].includes(token.type)) {
+    if (token.type === 'html') {
+      return resizedImageToken(token.raw) ?? { type: 'sourceInline', raw: token.raw };
+    }
+    if (token.type === 'checkbox') {
       return { type: 'sourceInline', raw: token.raw };
     }
     if ('tokens' in token && token.tokens) return { ...token, tokens: inlineTokens(token.tokens) };
@@ -51,7 +55,16 @@ function blockTokens(tokens: Token[], inListItem = false): Token[] {
     blanks(result.length ? lineBreaks - separatorBefore(token.type, inListItem) : lineBreaks);
     const raw = token.raw.replace(/\n+$/, '');
     lineBreaks = token.raw.length - raw.length;
-    if (
+    if (token.type === 'html' && /^<img\s/i.test(raw)) {
+      // A standalone <img> can start a Marked HTML block that also includes
+      // following lines of prose or images up to the next blank line.
+      const inline = inlineTokens(Lexer.lexInline(raw));
+      result.push(
+        inline[0]?.type === 'image'
+          ? { type: 'paragraph', raw, text: raw, tokens: inline }
+          : { type: 'sourceBlock', raw },
+      );
+    } else if (
       ['table', 'def', 'html'].includes(token.type) ||
       (token.type === 'list' && token.items.some((item: { task?: boolean }) => item.task))
     ) {

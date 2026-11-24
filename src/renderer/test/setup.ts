@@ -1,5 +1,6 @@
 import { cleanup } from '@testing-library/react';
-import { afterEach, vi } from 'vitest';
+import { mockConvertFileSrc } from '@tauri-apps/api/mocks';
+import { afterEach, beforeEach, vi } from 'vitest';
 
 // jsdom has no layout engine or OS color scheme.
 window.matchMedia = (media) =>
@@ -12,6 +13,7 @@ window.matchMedia = (media) =>
   });
 Range.prototype.getClientRects = () => document.body.getClientRects();
 Range.prototype.getBoundingClientRect = () => new DOMRect();
+beforeEach(() => mockConvertFileSrc('windows'));
 
 afterEach(() => {
   cleanup();
