@@ -1,8 +1,10 @@
 import type { Editor } from '@tiptap/core';
 import type { FormatCommand } from '../EditorCommandAdapter';
+import { chooseImage } from './imageUploads';
 
 export const formatters: Partial<Record<FormatCommand, (editor: Editor) => void>> = {
   toggleTaskList: (editor) => editor.chain().focus().toggleTaskItem().run(),
+  insertImage: chooseImage,
   toggleBold: (editor) => editor.chain().focus().toggleBold().run(),
   toggleItalic: (editor) => editor.chain().focus().toggleItalic().run(),
   toggleStrikethrough: (editor) => editor.chain().focus().toggleStrike().run(),

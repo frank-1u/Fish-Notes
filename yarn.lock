@@ -965,6 +965,11 @@
   resolved "https://registry.npmjs.org/@tiptap/extension-horizontal-rule/-/extension-horizontal-rule-3.35.0.tgz#e10628ef049a0013cffff487b29a73805b0fb0d1"
   integrity sha512-sT3DfYf/udMQjRXzZu3QEFAEkTUalTad39XpMtm7m8grdRqd7VxfgbfbvFf+P2l57xVs6n3vi40zKjoXLaDj5A==
 
+"@tiptap/extension-image@3.35.0":
+  version "3.35.0"
+  resolved "https://registry.yarnpkg.com/@tiptap/extension-image/-/extension-image-3.35.0.tgz#4e82203fd69455cb455bf9421ef29dea6140a90c"
+  integrity sha512-duyDyLvrM4I9tEQRWTa/2lYsit+i7OWJv2XjzwYuPozSmhxuCSZaE0zbbH9+uQHz/Hv/8pRV8wq+r+6Y1AD4hQ==
+
 "@tiptap/extension-italic@3.35.0":
   version "3.35.0"
   resolved "https://registry.npmjs.org/@tiptap/extension-italic/-/extension-italic-3.35.0.tgz#b3a57f0df5b3edfa74c2f445f4b77f562a2659df"

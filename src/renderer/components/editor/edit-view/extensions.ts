@@ -9,6 +9,7 @@ import { Blockquote } from '@tiptap/extension-blockquote';
 import { gfmTables } from './tables';
 import { taskLists } from './tasks';
 import { joinBlocks, sourceFallbacks } from './noteSource';
+import { EditImage } from './image';
 
 const FencedCode = CodeBlock.extend({
   addInputRules() {
@@ -107,6 +108,7 @@ export const editViewExtensions = [
   MarkdownLink,
   MarkdownBold,
   MarkdownItalic,
+  EditImage,
   Shortcuts,
   ...sourceFallbacks,
 ];
