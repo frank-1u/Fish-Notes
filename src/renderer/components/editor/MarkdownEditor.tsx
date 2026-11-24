@@ -268,8 +268,6 @@ export default function MarkdownEditor({
     [onChange, mode, cancelPreview],
   );
 
-  const getView = useCallback(() => editorRef.current?.view ?? null, []);
-
   const syncScroll = useCallback(
     (source: 'editor' | 'preview') => {
       if (isScrollingSyncRef.current) return;
@@ -345,7 +343,7 @@ export default function MarkdownEditor({
         />
       </div>
 
-      {showToolbar && mode !== 'preview' && <EditorToolbar getView={getView} />}
+      {showToolbar && mode !== 'preview' && <EditorToolbar commands={editorRef} />}
 
       <div className="flex-1 flex min-h-0 overflow-hidden">
         <div

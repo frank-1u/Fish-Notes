@@ -12,6 +12,7 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { syntaxHighlighting, defaultHighlightStyle, bracketMatching } from '@codemirror/language';
 import { closeBrackets, closeBracketsKeymap, autocompletion } from '@codemirror/autocomplete';
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
+import type { EditorCommandAdapter, FormatCommand } from './EditorCommandAdapter';
 
 import { createEditorTheme, type AppTheme } from './extensions/themes';
 import { smartListKeymap } from './extensions/smartTyping';
@@ -24,14 +25,33 @@ import {
   toggleInlineCode,
   insertCodeBlock,
   insertLink,
+  insertImage,
+  insertDivider,
+  insertTable,
   toggleBlockquote,
   toggleBulletList,
   toggleOrderedList,
   toggleTaskList,
   headingCommands,
+  type MarkdownCommand,
 } from './extensions/markdownCommands';
 
-export interface CodeMirrorHandle {
+const formatCommands: Record<FormatCommand, MarkdownCommand> = {
+  toggleBold,
+  toggleItalic,
+  toggleStrikethrough,
+  toggleBlockquote,
+  insertLink,
+  toggleInlineCode,
+  insertCodeBlock,
+  toggleBulletList,
+  toggleOrderedList,
+  toggleTaskList,
+  insertImage,
+  insertDivider,
+};
+
+export interface CodeMirrorHandle extends EditorCommandAdapter {
   view: EditorView | null;
   focus: () => void;
 }
@@ -73,16 +93,20 @@ const CodeMirrorView = forwardRef<CodeMirrorHandle, CodeMirrorViewProps>(
     );
     const loadedDocument = useRef<{ noteId: string | null; defaultValue: string }>();
 
-    useImperativeHandle(
-      ref,
-      () => ({
+    useImperativeHandle(ref, (): CodeMirrorHandle => {
+      const run = (command: MarkdownCommand) => {
+        if (viewRef.current) command(viewRef.current);
+      };
+      return {
         get view() {
           return viewRef.current;
         },
         focus: () => viewRef.current?.focus(),
-      }),
-      [],
-    );
+        format: (command) => run(formatCommands[command]),
+        toggleHeading: (level) => run(headingCommands(level)),
+        insertTable: (rows, columns) => run(insertTable(rows, columns)),
+      };
+    }, []);
 
     const extensions = useMemo<Extension[]>(
       () => [
