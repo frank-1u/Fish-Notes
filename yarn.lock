@@ -1007,6 +1007,11 @@
   resolved "https://registry.npmjs.org/@tiptap/extension-strike/-/extension-strike-3.35.0.tgz#03a3490ee85adec8a79fd54e0f96829136c30fe3"
   integrity sha512-xOLLgRO0yD9gYxMdp5fD4sJw4DJNTGrox4zLOSO99J6Pf8+8GdCPZAb9HBu4aHbCjt+16vu1i2uWmmkNnmbD1A==
 
+"@tiptap/extension-table@3.35.0":
+  version "3.35.0"
+  resolved "https://registry.yarnpkg.com/@tiptap/extension-table/-/extension-table-3.35.0.tgz#4ea0e0e1ff346a2543b8745c7ec25b8e16637ad3"
+  integrity sha512-4XnShXqUmlTZTUaURKyDfvodWQxF+PJNukPdGgqrqEfZvB3v/N2ROuAGZ3NVMaaulCeeve3GRXzaAyn+Zp9mdw==
+
 "@tiptap/extension-text@3.35.0":
   version "3.35.0"
   resolved "https://registry.npmjs.org/@tiptap/extension-text/-/extension-text-3.35.0.tgz#92b8aa690767767ad3a4c1175985066dd0285cbb"

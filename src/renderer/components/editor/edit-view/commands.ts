@@ -2,6 +2,7 @@ import type { Editor } from '@tiptap/core';
 import type { FormatCommand } from '../EditorCommandAdapter';
 
 export const formatters: Partial<Record<FormatCommand, (editor: Editor) => void>> = {
+  toggleTaskList: (editor) => editor.chain().focus().toggleTaskItem().run(),
   toggleBold: (editor) => editor.chain().focus().toggleBold().run(),
   toggleItalic: (editor) => editor.chain().focus().toggleItalic().run(),
   toggleStrikethrough: (editor) => editor.chain().focus().toggleStrike().run(),
@@ -13,5 +14,5 @@ export const formatters: Partial<Record<FormatCommand, (editor: Editor) => void>
   insertDivider: (editor) => editor.chain().focus().setHorizontalRule().run(),
 };
 export function supportsEditFormat(command: FormatCommand | 'insertTable') {
-  return command in formatters;
+  return command === 'insertTable' || command === 'insertLink' || command in formatters;
 }

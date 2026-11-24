@@ -1,11 +1,13 @@
 import { Extension, textblockTypeInputRule } from '@tiptap/core';
 import { StarterKit } from '@tiptap/starter-kit';
 import { CodeBlock } from '@tiptap/extension-code-block';
+import { Link } from '@tiptap/extension-link';
 import { Bold } from '@tiptap/extension-bold';
 import { Italic } from '@tiptap/extension-italic';
-import { ListItem } from '@tiptap/extension-list';
 import { Paragraph } from '@tiptap/extension-paragraph';
 import { Blockquote } from '@tiptap/extension-blockquote';
+import { gfmTables } from './tables';
+import { taskLists } from './tasks';
 import { joinBlocks, sourceFallbacks } from './noteSource';
 
 const FencedCode = CodeBlock.extend({
@@ -49,14 +51,16 @@ const Quote = Blockquote.extend({
   },
 });
 
-const MarkdownListItem = ListItem.extend({
-  renderMarkdown(node, helpers, context) {
-    const start: number = context.meta?.parentAttrs?.start ?? 1;
-    const marker = context.parentType === 'orderedList' ? `${start + context.index}. ` : '- ';
-    const text = joinBlocks(node.content ?? [], (block) => helpers.renderChildren([block]), true);
-    return marker + text.replace(/\n(?=[^\n])/g, '\n' + ' '.repeat(marker.length));
+const MarkdownLink = Link.extend({
+  renderMarkdown(node, helpers) {
+    const href: string = node.attrs?.href ?? '';
+    const destination = /[\s()<>\\]/.test(href)
+      ? '<' + href.replace(/[<>\\]/g, '\\$&') + '>'
+      : href;
+    const title = node.attrs?.title;
+    return `[${helpers.renderChildren(node)}](${destination}${title ? ' "' + title.replace(/["\\]/g, '\\$&') + '"' : ''})`;
   },
-});
+}).configure({ openOnClick: false, autolink: false, linkOnPaste: false });
 
 // MarkdownManager normally reopens crossed emphasis ranges with HTML tags.
 // Use the alternative CommonMark delimiter for the reopened range instead.
@@ -72,6 +76,7 @@ const Shortcuts = Extension.create({
       'Mod-Shift-s': () => this.editor.commands.toggleStrike(),
       'Mod-Shift-.': () => this.editor.commands.toggleBlockquote(),
       'Mod-Shift-e': () => this.editor.commands.toggleCodeBlock(),
+      'Mod-Shift-t': () => this.editor.commands.toggleTaskItem(),
       'Mod-Shift-l': () => this.editor.commands.toggleBulletList(),
       'Mod-Shift-o': () => this.editor.commands.toggleOrderedList(),
     };
@@ -83,6 +88,8 @@ const Shortcuts = Extension.create({
 export const editViewExtensions = [
   StarterKit.configure({
     listItem: false,
+    bulletList: false,
+    orderedList: false,
     bold: false,
     italic: false,
     paragraph: false,
@@ -90,12 +97,14 @@ export const editViewExtensions = [
     codeBlock: false,
     underline: false,
     trailingNode: false,
-    link: { openOnClick: false, autolink: false, linkOnPaste: false },
+    link: false,
   }),
   TextParagraph,
   Quote,
   FencedCode,
-  MarkdownListItem,
+  ...taskLists,
+  ...gfmTables,
+  MarkdownLink,
   MarkdownBold,
   MarkdownItalic,
   Shortcuts,
