@@ -41,7 +41,7 @@ afterEach(clearMocks);
 
 const modeKey = 'fish-notes:editor-mode';
 
-async function renderMarkdownEditor(defaultValue = '', mdView = true) {
+async function renderMarkdownEditor(defaultValue = '', mdView = true, showToolbar?: boolean) {
   if (mdView) localStorage.setItem(modeKey, 'source');
   const onChange = vi.fn<(source: string) => void>();
   const onSave = vi.fn();
@@ -53,7 +53,7 @@ async function renderMarkdownEditor(defaultValue = '', mdView = true) {
         defaultValue={defaultValue}
         onChange={(doc) => onChange(doc.toString())}
         onSave={onSave}
-        showToolbar
+        showToolbar={showToolbar}
       />,
       { wrapper: Providers },
     );
@@ -67,6 +67,18 @@ function paste(editor: HTMLElement, text: string) {
     clipboardData: { getData: (type: string) => (type === 'text/plain' ? text : '') },
   });
 }
+
+it.each([undefined, false])(
+  'ignores a legacy hidden toolbar setting with showToolbar=%s in both views',
+  async (showToolbar) => {
+    localStorage.setItem('fish-notes:editor-toolbar', '0');
+    await renderMarkdownEditor('Note', false, showToolbar);
+    const boldButton = () => screen.queryByRole('button', { name: 'Bold' });
+    expect(Boolean(boldButton())).toBe(showToolbar !== false);
+    fireEvent.click(screen.getByRole('button', { name: 'MD' }));
+    expect(Boolean(boldButton())).toBe(showToolbar !== false);
+  },
+);
 
 it('emits edited Note Source immediately from MD View', async () => {
   const { onChange } = await renderMarkdownEditor('周报');
@@ -102,6 +114,17 @@ it.each(['#', '##', '###', '####', '#####', '######'])(
     expect(onChange).toHaveBeenLastCalledWith(`${prefix} Agenda`);
   },
 );
+
+it.each([3, 4, 5, 6])('toggles heading level %i with its Edit View shortcut', async (level) => {
+  const { onChange } = await renderMarkdownEditor('Agenda', false);
+  const editor = screen.getByRole('textbox');
+  fireEvent.keyDown(editor, { key: String(level), ctrlKey: true });
+  expect(screen.queryByRole('heading', { name: 'Agenda', level })).toBeTruthy();
+  expect(onChange).toHaveBeenLastCalledWith('#'.repeat(level) + ' Agenda');
+  fireEvent.keyDown(editor, { key: String(level), ctrlKey: true });
+  expect(screen.queryByRole('heading')).toBeNull();
+  expect(onChange).toHaveBeenLastCalledWith('Agenda');
+});
 
 it('inserts the dimensions chosen in the toolbar table picker', async () => {
   const { onChange } = await renderMarkdownEditor();
@@ -377,6 +400,37 @@ it('round-trips overlapping bold and italic selections as pure Markdown', async 
   expect([...reopened.querySelectorAll('strong')].map((el) => el.textContent).join('')).toBe(
     'abcdef',
   );
+});
+
+it('retains a literal underscore inside crossed word-internal emphasis', async () => {
+  const { onChange } = await renderMarkdownEditor('aa_a zz', false);
+  const editor = screen.getByRole('textbox');
+  editor.focus();
+  const text = editor.querySelector('p')!.firstChild!;
+  window.getSelection()!.setBaseAndExtent(text, 0, text, 3);
+  await act(async () => {
+    fireEvent(document, new Event('selectionchange'));
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Bold' }));
+  window
+    .getSelection()!
+    .setBaseAndExtent(
+      editor.querySelector('strong')!.firstChild!,
+      2,
+      editor.querySelector('p')!.lastChild!,
+      1,
+    );
+  await act(async () => {
+    fireEvent(document, new Event('selectionchange'));
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Italic' }));
+  expect(onChange.mock.lastCall?.[0]).not.toMatch(/<\/?(?:em|strong)>/);
+  fireEvent.click(screen.getByRole('button', { name: 'MD' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+  const reopened = screen.getByRole('textbox');
+  expect(reopened.textContent).toBe('aa_a zz');
+  expect([...reopened.querySelectorAll('strong')].map((el) => el.textContent).join('')).toBe('aa_');
+  expect([...reopened.querySelectorAll('em')].map((el) => el.textContent).join('')).toBe('_a');
 });
 
 it('preserves loose and nested list content and blank lines after editing', async () => {

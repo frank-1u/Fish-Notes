@@ -2,7 +2,7 @@ import { Extension, getChangedRanges } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
-import { inlineHashtagPattern } from './hashtagMarkdown';
+import { inlineHashtagPattern } from '../../../utils/hashtags';
 
 const key = new PluginKey<DecorationSet>('inlineHashtags');
 

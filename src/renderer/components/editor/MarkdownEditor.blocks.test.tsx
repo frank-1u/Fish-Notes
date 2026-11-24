@@ -86,6 +86,57 @@ it('toggles a loaded task in a mixed GFM list and persists it through MD View', 
   expect(onChange).toHaveBeenLastCalledWith(source);
 });
 
+it('round-trips loose task checkboxes without adding their markers to the labels', async () => {
+  const source = '- [ ] first\n\n- [x] last';
+  const { editor, onChange } = await mount(source);
+  const [first, last] = screen.getAllByRole<HTMLInputElement>('checkbox');
+  expect(first.checked).toBe(false);
+  expect(last.checked).toBe(true);
+  fireEvent.click(first);
+  expect(onChange).toHaveBeenLastCalledWith('- [x] first\n\n- [x] last');
+  fireEvent.click(last);
+  expect(onChange).toHaveBeenLastCalledWith('- [x] first\n\n- [ ] last');
+  expect(
+    [...editor.querySelectorAll('li')].map((item) => item.querySelector('p')?.textContent),
+  ).toEqual(['first', 'last']);
+  clickButton('MD');
+  clickButton('Edit');
+  expect(screen.getAllByRole<HTMLInputElement>('checkbox').map((box) => box.checked)).toEqual([
+    true,
+    false,
+  ]);
+});
+
+it.each([1, 7])(
+  'keeps ordered GFM tasks starting at %i interactive through edits and reopening',
+  async (start) => {
+    const list = `${start}. [x] **done**\n${start + 1}. [ ] todo\n${start + 2}. plain`;
+    const { editor, onChange } = await mount('Title\n\n' + list);
+    const ordered = editor.querySelector('ol')!;
+    expect(ordered.start).toBe(start);
+    const tasks = within(ordered).getAllByRole<HTMLInputElement>('checkbox');
+    expect(tasks.map((task) => task.checked)).toEqual([true, false]);
+    await caret(editor, editor.querySelector('p')!.firstChild!);
+    clickButton('H');
+    clickButton('Heading 2');
+    expect(onChange).toHaveBeenLastCalledWith('## Title\n\n' + list);
+    fireEvent.click(tasks[0]);
+    fireEvent.click(tasks[1]);
+    expect(onChange).toHaveBeenLastCalledWith(
+      `## Title\n\n${start}. [ ] **done**\n${start + 1}. [x] todo\n${start + 2}. plain`,
+    );
+    clickButton('MD');
+    clickButton('Edit');
+    const reopened = screen.getByRole('list') as HTMLOListElement;
+    expect(reopened.start).toBe(start);
+    expect(
+      within(reopened)
+        .getAllByRole<HTMLInputElement>('checkbox')
+        .map((task) => task.checked),
+    ).toEqual([false, true]);
+  },
+);
+
 it.each([' ', 'x'])('converts a naturally typed task marker with state [%s]', async (state) => {
   const { editor, onChange } = await mount('');
   await caret(editor, editor.querySelector('p')!);

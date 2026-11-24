@@ -6,7 +6,6 @@ import TablePicker from './TablePicker';
 
 interface EditorToolbarProps {
   commands: RefObject<EditorCommandAdapter>;
-  supports?: (command: FormatCommand | 'insertTable') => boolean;
 }
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
@@ -326,11 +325,11 @@ function ToolbarButton({ button, commands }: EditorToolbarProps & { button: Tool
   );
 }
 
-function EditorToolbar({ commands, supports }: EditorToolbarProps) {
+function EditorToolbar({ commands }: EditorToolbarProps) {
   const renderButtons = (buttons: ToolButton[]) =>
-    buttons
-      .filter((button) => !supports || supports(button.command))
-      .map((button) => <ToolbarButton key={button.command} button={button} commands={commands} />);
+    buttons.map((button) => (
+      <ToolbarButton key={button.command} button={button} commands={commands} />
+    ));
   return (
     <div
       className="flex items-center gap-0.5 px-2 py-1 shrink-0"
@@ -349,12 +348,8 @@ function EditorToolbar({ commands, supports }: EditorToolbarProps) {
       {renderButtons(LIST_BUTTONS)}
       <Divider />
       {renderButtons(MEDIA_BUTTONS)}
-      {(!supports || supports('insertTable')) && (
-        <>
-          <Divider />
-          <TableMenu commands={commands} />
-        </>
-      )}
+      <Divider />
+      <TableMenu commands={commands} />
     </div>
   );
 }

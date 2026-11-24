@@ -2,7 +2,7 @@ import type { Editor } from '@tiptap/core';
 import type { FormatCommand } from '../EditorCommandAdapter';
 import { chooseImage } from './imageUploads';
 
-export const formatters: Partial<Record<FormatCommand, (editor: Editor) => void>> = {
+export const formatters: Record<Exclude<FormatCommand, 'insertLink'>, (editor: Editor) => void> = {
   toggleTaskList: (editor) => editor.chain().focus().toggleTaskItem().run(),
   insertImage: chooseImage,
   toggleBold: (editor) => editor.chain().focus().toggleBold().run(),
@@ -15,6 +15,3 @@ export const formatters: Partial<Record<FormatCommand, (editor: Editor) => void>
   insertCodeBlock: (editor) => editor.chain().focus().toggleCodeBlock().run(),
   insertDivider: (editor) => editor.chain().focus().setHorizontalRule().run(),
 };
-export function supportsEditFormat(command: FormatCommand | 'insertTable') {
-  return command === 'insertTable' || command === 'insertLink' || command in formatters;
-}

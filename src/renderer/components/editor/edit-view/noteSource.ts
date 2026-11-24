@@ -3,7 +3,7 @@ import { MarkdownManager } from '@tiptap/markdown';
 import { Lexer, Marked, type Token, type Tokens, type marked } from 'marked';
 import type { Node as DocumentNode } from '@tiptap/pm/model';
 import type { Extensions } from '@tiptap/core';
-import { HashtagLiteral, literalHashtagNames } from './hashtagMarkdown';
+import { MarkdownLiteral, literalHashtagNames } from './hashtagMarkdown';
 import { resizedImageToken } from './image';
 
 // Unsupported Markdown remains literal and editable in MD View. Never feed
@@ -43,8 +43,20 @@ function separatorBefore(type: string | undefined, inListItem: boolean) {
 function taskMarker(item: Tokens.ListItem) {
   // Marked trims a trailing space at EOF, so a fresh empty task has no
   // checkbox token until the user gives it a label.
-  if (item.task)
-    return { checked: !!item.checked, tokens: item.tokens.filter((t) => t.type !== 'checkbox') };
+  if (item.task) {
+    const [first, ...rest] = item.tokens;
+    // Marked includes the separator space in the checkbox token. In a
+    // loose list that token is the first inline child of the first paragraph.
+    let tokens = item.tokens;
+    if (first?.type === 'checkbox') tokens = rest;
+    else if (
+      (first?.type === 'paragraph' || first?.type === 'text') &&
+      first.tokens?.[0]?.type === 'checkbox'
+    ) {
+      tokens = [{ ...first, tokens: first.tokens.slice(1) }, ...rest];
+    }
+    return { checked: !!item.checked, tokens };
+  }
   const empty = /^\[([ xX])\]$/.exec(item.text);
   if (empty) return { checked: empty[1].toLowerCase() === 'x', tokens: [] };
 }
@@ -157,6 +169,36 @@ export function joinBlocks(
   return markdown + '\n'.repeat(hasBlock ? blanks : Math.max(0, blanks - 1));
 }
 
+// An emphasis delimiter before punctuation (including an escaped underscore)
+// cannot open immediately after a letter. A character reference preserves
+// that letter while placing a semicolon on the delimiter's left.
+function protectEmphasisOpenings(nodes: JSONContent[]): JSONContent[] {
+  return nodes.flatMap((node, i) => {
+    const next = nodes[i + 1];
+    if (
+      !next?.marks?.some(
+        (mark) =>
+          (mark.type === 'bold' || mark.type === 'italic') &&
+          !node.marks?.some((current) => current.type === mark.type),
+      ) ||
+      !/^[\p{P}\p{S}]/u.test(next.text ?? '') ||
+      node.marks?.some((mark) => mark.type === 'code' || mark.type === MarkdownLiteral.name)
+    )
+      return node;
+    const letter = node.text?.match(/[\p{L}\p{N}]$/u);
+    if (!letter) return node;
+    const prefix = node.text!.slice(0, letter.index);
+    return [
+      ...(prefix ? [{ ...node, text: prefix }] : []),
+      {
+        ...node,
+        text: `&#${letter[0].codePointAt(0)};`,
+        marks: [...(node.marks ?? []), { type: MarkdownLiteral.name }],
+      },
+    ];
+  });
+}
+
 class NoteSourceMarkdown extends MarkdownManager {
   override renderNodes(
     nodes: JSONContent | JSONContent[],
@@ -174,9 +216,15 @@ class NoteSourceMarkdown extends MarkdownManager {
     let start = 0;
     const append = (end: number) => {
       const run = start === 0 && end === nodes.length ? nodes : nodes.slice(start, end);
-      const text = super.renderNodes(literalHashtagNames(run), parent, separator, index, level);
+      const text = super.renderNodes(
+        protectEmphasisOpenings(literalHashtagNames(run)),
+        parent,
+        separator,
+        index,
+        level,
+      );
       result += result.endsWith('_')
-        ? text.replace(/^./u, (letter) => `&#${letter.codePointAt(0)};`)
+        ? text.replace(/^[\p{L}\p{N}]/u, (letter) => `&#${letter.codePointAt(0)};`)
         : text;
       start = end;
     };
@@ -203,7 +251,7 @@ export function createNoteSourceCodec(extensions: Extensions) {
   lexer.Lexer = NoteSourceLexer;
   const markdown = new NoteSourceMarkdown({
     marked: lexer as unknown as typeof marked,
-    extensions: [...extensions, HashtagLiteral],
+    extensions: [...extensions, MarkdownLiteral],
   });
   return {
     parse: (source: string) => markdown.parse(source),

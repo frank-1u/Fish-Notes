@@ -28,10 +28,22 @@ function renderListItem(
 // GFM checkboxes belong to individual items. Ordinary bullets and tasks can
 // share a list, including its nesting, numbering and continuation paragraphs.
 const listContent = '(listItem | taskItem)+';
+const orderedTokenizer = OrderedList.config.markdownTokenizer!;
 export const taskLists = [
   ListItem.extend({ renderMarkdown: renderListItem }),
   BulletList.extend({ content: listContent }),
-  OrderedList.extend({ content: listContent }),
+  OrderedList.extend({
+    content: listContent,
+    markdownTokenizer: {
+      ...orderedTokenizer,
+      tokenize(source, tokens, lexer) {
+        // Marked handles numeric GFM lists, including per-item checkboxes.
+        // TipTap's tokenizer also accepts alphabetic and Roman numerals.
+        if (/^ {0,3}\d{1,9}[.)](?=[ \t\n]|$)/.test(source)) return;
+        return orderedTokenizer.tokenize(source, tokens, lexer);
+      },
+    },
+  }),
   TaskItem.extend({
     addCommands() {
       return {

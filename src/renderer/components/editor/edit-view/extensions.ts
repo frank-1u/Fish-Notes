@@ -75,6 +75,10 @@ const Shortcuts = Extension.create({
   name: 'editViewShortcuts',
   addKeyboardShortcuts() {
     return {
+      'Mod-3': () => this.editor.commands.toggleHeading({ level: 3 }),
+      'Mod-4': () => this.editor.commands.toggleHeading({ level: 4 }),
+      'Mod-5': () => this.editor.commands.toggleHeading({ level: 5 }),
+      'Mod-6': () => this.editor.commands.toggleHeading({ level: 6 }),
       'Mod-Shift-s': () => this.editor.commands.toggleStrike(),
       'Mod-Shift-.': () => this.editor.commands.toggleBlockquote(),
       'Mod-Shift-e': () => this.editor.commands.toggleCodeBlock(),

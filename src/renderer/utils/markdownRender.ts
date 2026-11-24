@@ -1,6 +1,8 @@
 import { convertFileSrc } from '@tauri-apps/api/core';
+import { commonmarkLanguage } from '@codemirror/lang-markdown';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
+import { inlineHashtagPattern } from './hashtags';
 
 // Allow http(s)/mailto/tel links and our own fish-image: scheme; strip everything else
 // (javascript:, inline event handlers, <script>, etc.) from rendered note content.
@@ -14,38 +16,28 @@ const SANITIZE_CONFIG = {
 // preview/export, so we inject visible "&nbsp;" paragraphs for each blank beyond
 // the first. Code fences are skipped so multi-line code blocks keep their blanks.
 function preserveBlankLines(md: string): string {
-  const lines = md.split('\n');
-  const result: string[] = [];
-  let consecutiveBlank = 0;
-  let inCodeBlock = false;
+  let syntax: ReturnType<typeof commonmarkLanguage.parser.parse> | undefined;
+  let previousBlank = false;
+  let offset = 0;
+  return md
+    .split('\n')
+    .map((line) => {
+      const start = offset;
+      offset += line.length + 1;
+      const blank = !line.trim();
+      const extraBlank = previousBlank && blank;
+      previousBlank = blank;
+      if (!extraBlank) return line;
 
-  for (const line of lines) {
-    if (/^\s*```/.test(line)) {
-      inCodeBlock = !inCodeBlock;
-      result.push(line);
-      consecutiveBlank = 0;
-      continue;
-    }
-    if (inCodeBlock) {
-      result.push(line);
-      consecutiveBlank = 0;
-      continue;
-    }
-    if (line.trim() === '') {
-      consecutiveBlank++;
-      if (consecutiveBlank === 1) {
-        result.push('');
-      } else {
-        result.push('&nbsp;');
-        result.push('');
-      }
-    } else {
-      consecutiveBlank = 0;
-      result.push(line);
-    }
-  }
-
-  return result.join('\n');
+      // The MD View's CommonMark parser tracks fence character and length,
+      // closing-line whitespace, and indentation relative to list containers.
+      syntax ??= commonmarkLanguage.parser.parse(md);
+      const node = syntax.resolve(start, -1);
+      if (node.name === 'CodeText' || node.name === 'FencedCode' || node.name === 'CodeBlock')
+        return line;
+      return '&nbsp;\n';
+    })
+    .join('\n');
 }
 
 export function fishImageName(image: HTMLImageElement): string | undefined {
@@ -80,7 +72,7 @@ export function renderMarkdown(markdown: string): DocumentFragment {
   while (walker.nextNode()) textNodes.push(walker.currentNode as Text);
   for (const node of textNodes) {
     if (node.parentElement?.closest('code, pre, style, textarea')) continue;
-    const parts = node.data.split(/((?<=\s|^)#[\p{L}\p{N}_][\p{L}\p{N}_/]*)/gu);
+    const parts = node.data.split(inlineHashtagPattern);
     if (parts.length === 1) continue;
     node.replaceWith(
       ...parts.map((part, index) => {

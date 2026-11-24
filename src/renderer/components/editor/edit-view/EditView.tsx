@@ -70,7 +70,7 @@ export default forwardRef<EditorCommandAdapter, Props>(function EditView(
         const editor = editorRef.current;
         if (!editor) return;
         if (command === 'insertLink') setLink(linkTarget(editor));
-        else formatters[command]?.(editor);
+        else formatters[command](editor);
       },
       insertTable(rows, columns) {
         editorRef.current?.chain().focus().insertTable({ rows, cols: columns }).run();

@@ -5,7 +5,6 @@ import type { ActionSelection } from './ActionSelection';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
 import CodeMirrorView, { type CodeMirrorHandle } from './CodeMirrorView';
-import { supportsEditFormat } from './edit-view/commands';
 import type { EditorCommandAdapter } from './EditorCommandAdapter';
 import EditorToolbar from './EditorToolbar';
 import PolishDialog from './PolishDialog';
@@ -30,17 +29,11 @@ interface MarkdownEditorProps {
 }
 
 const MODE_STORAGE_KEY = 'fish-notes:editor-mode';
-const TOOLBAR_STORAGE_KEY = 'fish-notes:editor-toolbar';
 
 function readMode(): EditorMode {
   const stored = localStorage.getItem(MODE_STORAGE_KEY);
   if (stored === 'preview' || stored === 'split') localStorage.setItem(MODE_STORAGE_KEY, 'edit');
   return stored === 'source' ? 'source' : 'edit';
-}
-
-function readToolbar(): boolean {
-  const stored = localStorage.getItem(TOOLBAR_STORAGE_KEY);
-  return stored === null ? true : stored === '1';
 }
 
 interface TabButtonProps {
@@ -75,13 +68,12 @@ export default function MarkdownEditor({
   defaultValue,
   onChange,
   onSave,
-  showToolbar: showToolbarProp,
+  showToolbar = true,
 }: MarkdownEditorProps) {
   const { t, i18n } = useTranslation();
   const { resolvedTheme } = useTheme();
   const { askWithSelection } = useAssistantEntryPoints();
   const [mode, setMode] = useState<EditorMode>(readMode);
-  const [toolbarVisible] = useState(readToolbar);
   const editorRef = useRef<CodeMirrorHandle>(null);
   const editRef = useRef<EditorCommandAdapter>(null);
   const latestDoc = useRef<NoteSourceSnapshot | null>(null);
@@ -94,7 +86,6 @@ export default function MarkdownEditor({
   if (entry.noteId !== noteId || entry.defaultValue !== defaultValue) {
     setEntry({ noteId, defaultValue, source: defaultValue, focusOnMount: false });
   }
-  const showToolbar = showToolbarProp ?? toolbarVisible;
 
   const [polishSel, setPolishSel] = useState<ActionSelection | null>(null);
   const [polishDialog, setPolishDialog] = useState<{
@@ -213,12 +204,7 @@ export default function MarkdownEditor({
         />
       </div>
 
-      {showToolbar && (
-        <EditorToolbar
-          commands={mode === 'edit' ? editRef : editorRef}
-          supports={mode === 'edit' ? supportsEditFormat : undefined}
-        />
-      )}
+      {showToolbar && <EditorToolbar commands={mode === 'edit' ? editRef : editorRef} />}
       {mode === 'edit' ? (
         noteId && (
           <Suspense fallback={<span className="px-6 py-4">{t('Loading note...')}</span>}>

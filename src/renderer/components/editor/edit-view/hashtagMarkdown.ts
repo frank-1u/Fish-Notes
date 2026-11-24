@@ -1,12 +1,10 @@
 import { Mark, type JSONContent } from '@tiptap/core';
+import { inlineHashtagPattern, leadingHashtag } from '../../../utils/hashtags';
 
-export const inlineHashtagPattern = /(?<=\s|^)#[\p{L}\p{N}_][\p{L}\p{N}_/]*/gu;
-
-// This mark exists only in the Markdown codec. It tells MarkdownManager to
-// write the literal tag name (including underscores) without adding delimiters.
-// The tokenizer returns ordinary text even for names like #_today_.
-export const HashtagLiteral = Mark.create({
-  name: 'hashtagLiteral',
+// Codec-only mark for text already encoded as Markdown (literal hashtags
+// or character references). The hashtag tokenizer returns ordinary text.
+export const MarkdownLiteral = Mark.create({
+  name: 'markdownLiteral',
   code: true,
   markdownTokenizer: {
     name: 'hashtagLiteral',
@@ -15,7 +13,7 @@ export const HashtagLiteral = Mark.create({
     tokenize(source, previous) {
       const preceding = previous.at(-1)?.raw;
       if (preceding && !/\s$/u.test(preceding)) return;
-      const tag = /^#[\p{L}\p{N}_][\p{L}\p{N}_/]*/u.exec(source)?.[0];
+      const tag = leadingHashtag.exec(source)?.[0];
       if (tag) return { type: 'text', raw: tag, text: tag };
     },
   },
@@ -38,7 +36,7 @@ export function literalHashtagNames(nodes: JSONContent[]): JSONContent[] {
       parts.push({
         ...node,
         text: match[0],
-        marks: [...(node.marks ?? []), { type: HashtagLiteral.name }],
+        marks: [...(node.marks ?? []), { type: MarkdownLiteral.name }],
       });
       end = match.index + match[0].length;
     }
