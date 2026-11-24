@@ -8,17 +8,13 @@ import {
   forwardRef,
   type MouseEvent,
 } from 'react';
-import { openUrl } from '@tauri-apps/plugin-opener';
-import { parseAppError } from '../../api';
+import { isExternalLink, openExternalLink } from './externalLinks';
 import { renderPreview } from '../../utils/markdownRender';
-import { message } from '../message';
 
 interface MarkdownPreviewProps {
   value: string;
   className?: string;
 }
-
-const EXTERNAL_LINK_RE = /^(https?|mailto|tel):/i;
 
 function updatePreview(container: HTMLDivElement, html: string) {
   const template = document.createElement('template');
@@ -69,9 +65,9 @@ const MarkdownPreview = forwardRef<HTMLDivElement, MarkdownPreviewProps>(
       const anchor = e.target.closest('a');
       if (!anchor) return;
       const href = anchor.getAttribute('href')?.trim();
-      if (!href || !EXTERNAL_LINK_RE.test(href)) return;
+      if (!href || !isExternalLink(href)) return;
       e.preventDefault();
-      void openUrl(href).catch((error: unknown) => message.error(parseAppError(error).message));
+      openExternalLink(href);
     }, []);
 
     return (

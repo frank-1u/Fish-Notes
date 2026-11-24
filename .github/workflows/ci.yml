@@ -21,6 +21,7 @@ jobs:
       - run: npx eslint --ext .ts,.tsx --quiet .
       - run: yarn format:check
       - run: npx tsc --noEmit
+      - run: yarn test
       - run: npx vite build
 
   rust:

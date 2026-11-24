@@ -45,6 +45,7 @@ export default function TablePicker({ onSelect, onClose }: TablePickerProps) {
           return (
             <div
               key={i}
+              data-testid={`table-size-${r}x${c}`}
               onMouseEnter={() => setHover({ rows: r, cols: c })}
               onClick={() => {
                 onSelect(r, c);

@@ -3,9 +3,8 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { api, parseAppError } from '../api';
 import { printNote } from '../utils/printNote';
 import React, { useCallback, useState, useRef, useEffect, useLayoutEffect } from 'react';
-import type { Text } from '@codemirror/state';
 import { useTranslation } from 'react-i18next';
-import MarkdownEditor from './editor/MarkdownEditor';
+import MarkdownEditor, { type NoteSourceSnapshot } from './editor/MarkdownEditor';
 import TagBar from './TagBar';
 import PasswordPrompt from './PasswordPrompt';
 import { useAutoSave } from '../hooks/useAutoSave';
@@ -53,7 +52,7 @@ function Editor({
   const [decrypted, setDecrypted] = useState<string | null>(null);
   const [decryptError, setDecryptError] = useState<string | null>(null);
 
-  const editedDoc = useRef<Text | null>(null);
+  const editedDoc = useRef<NoteSourceSnapshot | null>(null);
   const [previousNoteId, setPreviousNoteId] = useState(noteId);
   if (noteId !== previousNoteId) {
     setPreviousNoteId(noteId);
@@ -154,10 +153,10 @@ function Editor({
   );
 
   const handleChange = useCallback(
-    (doc: Text) => {
+    (doc: NoteSourceSnapshot) => {
       if (!activeNoteId) return;
       editedDoc.current = doc;
-      // Text is immutable, so a pending save still belongs to this note after setState.
+      // The snapshot is immutable, so a pending save still belongs to this note after setState.
       save(() => {
         onContentChange?.(activeNoteId, doc.toString());
       });

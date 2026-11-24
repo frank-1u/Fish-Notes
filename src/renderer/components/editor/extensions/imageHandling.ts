@@ -1,17 +1,10 @@
-import { api } from '../../../api';
 import { EditorView } from '@codemirror/view';
 import { EditorSelection, StateField } from '@codemirror/state';
+import { saveImageFile } from '../saveImageFile';
 
 async function fileToMarkdown(file: File): Promise<string | null> {
-  if (!file.type.startsWith('image/')) return null;
-  try {
-    const buffer = await file.arrayBuffer();
-    const src = await api.images.saveFromBuffer(buffer, file.type);
-    return `![](${src})`;
-  } catch (err) {
-    console.error('Failed to save image:', err);
-    return null;
-  }
+  const src = await saveImageFile(file);
+  return src ? `![](${src})` : null;
 }
 
 function insertAt(view: EditorView, pos: number, text: string) {

@@ -1,22 +1,13 @@
 import { EditorView } from '@codemirror/view';
 import type { Extension } from '@codemirror/state';
 
-export interface PolishSelectionInfo {
-  from: number;
-  to: number;
-  text: string;
-}
-
-/** 选区文字至少要这么长，才会显示润色 bubble。避免误触。 */
-const MIN_LENGTH = 4;
+import { minimumSelectionLength, type ActionSelection } from '../ActionSelection';
 
 /**
  * 监听 CodeMirror 选区变化，当选中文字 >= MIN_LENGTH 时通过回调汇报选区
  * 信息；选区清空或太短时回调 null。React 层据此决定是否渲染浮动按钮。
  */
-export function polishBubbleExtension(
-  onChange: (sel: PolishSelectionInfo | null) => void,
-): Extension {
+export function polishBubbleExtension(onChange: (sel: ActionSelection | null) => void): Extension {
   return EditorView.updateListener.of((update) => {
     if (!update.selectionSet && !update.docChanged) return;
     const main = update.state.selection.main;
@@ -25,10 +16,29 @@ export function polishBubbleExtension(
       return;
     }
     const text = update.state.sliceDoc(main.from, main.to);
-    if (text.trim().length < MIN_LENGTH) {
+    if (text.trim().length < minimumSelectionLength) {
       onChange(null);
       return;
     }
-    onChange({ from: main.from, to: main.to, text });
+    const { view } = update;
+    const { from, to } = main;
+    onChange({
+      text,
+      getMarkdown: () => text,
+      getBounds: () => {
+        const start = view.coordsAtPos(from);
+        const end = view.coordsAtPos(to);
+        return start && end ? { start, end, editor: view.dom.getBoundingClientRect() } : null;
+      },
+      replaceMarkdown(markdown) {
+        if (to > view.state.doc.length || view.state.sliceDoc(from, to) !== text) return false;
+        view.dispatch({
+          changes: { from, to, insert: markdown },
+          selection: { anchor: from + markdown.length },
+        });
+        view.focus();
+        return true;
+      },
+    });
   });
 }

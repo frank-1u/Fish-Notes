@@ -1,28 +1,11 @@
-import { memo, useState, useRef, useEffect, type ReactNode } from 'react';
+import { memo, useState, useRef, useEffect, type ReactNode, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { EditorView } from '@codemirror/view';
+import type { EditorCommandAdapter, FormatCommand } from './EditorCommandAdapter';
 import Tooltip from '../Tooltip';
 import TablePicker from './TablePicker';
-import {
-  toggleBold,
-  toggleItalic,
-  toggleStrikethrough,
-  toggleInlineCode,
-  insertCodeBlock,
-  insertLink,
-  insertImage,
-  insertDivider,
-  insertTable,
-  toggleBlockquote,
-  toggleBulletList,
-  toggleOrderedList,
-  toggleTaskList,
-  headingCommands,
-  type MarkdownCommand,
-} from './extensions/markdownCommands';
 
 interface EditorToolbarProps {
-  getView: () => EditorView | null;
+  commands: RefObject<EditorCommandAdapter>;
 }
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
@@ -35,11 +18,10 @@ function shortcut(...keys: Array<'Mod' | 'Shift' | 'Alt' | string>): string[] {
 }
 
 interface ToolButton {
-  key: string;
+  command: FormatCommand;
   labelKey: string;
   shortcut?: string[];
   icon: ReactNode;
-  command: MarkdownCommand;
 }
 
 const icon = (path: ReactNode) => (
@@ -59,7 +41,6 @@ const icon = (path: ReactNode) => (
 
 const BASIC_BUTTONS: ToolButton[] = [
   {
-    key: 'bold',
     labelKey: 'Bold',
     shortcut: shortcut('Mod', 'B'),
     icon: icon(
@@ -68,10 +49,9 @@ const BASIC_BUTTONS: ToolButton[] = [
         <path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z" />
       </>,
     ),
-    command: toggleBold,
+    command: 'toggleBold',
   },
   {
-    key: 'italic',
     labelKey: 'Italic',
     shortcut: shortcut('Mod', 'I'),
     icon: icon(
@@ -81,10 +61,9 @@ const BASIC_BUTTONS: ToolButton[] = [
         <line x1="15" y1="4" x2="9" y2="20" />
       </>,
     ),
-    command: toggleItalic,
+    command: 'toggleItalic',
   },
   {
-    key: 'strike',
     labelKey: 'Strikethrough',
     shortcut: shortcut('Mod', 'Shift', 'S'),
     icon: icon(
@@ -94,13 +73,12 @@ const BASIC_BUTTONS: ToolButton[] = [
         <line x1="4" y1="12" x2="20" y2="12" />
       </>,
     ),
-    command: toggleStrikethrough,
+    command: 'toggleStrikethrough',
   },
 ];
 
 const STRUCTURE_BUTTONS: ToolButton[] = [
   {
-    key: 'quote',
     labelKey: 'Blockquote',
     shortcut: shortcut('Mod', 'Shift', '.'),
     icon: icon(
@@ -109,10 +87,9 @@ const STRUCTURE_BUTTONS: ToolButton[] = [
         <path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z" />
       </>,
     ),
-    command: toggleBlockquote,
+    command: 'toggleBlockquote',
   },
   {
-    key: 'link',
     labelKey: 'Link',
     shortcut: shortcut('Mod', 'K'),
     icon: icon(
@@ -121,13 +98,12 @@ const STRUCTURE_BUTTONS: ToolButton[] = [
         <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
       </>,
     ),
-    command: insertLink,
+    command: 'insertLink',
   },
 ];
 
 const CODE_BUTTONS: ToolButton[] = [
   {
-    key: 'inline-code',
     labelKey: 'Inline code',
     shortcut: shortcut('Mod', 'E'),
     icon: icon(
@@ -136,10 +112,9 @@ const CODE_BUTTONS: ToolButton[] = [
         <polyline points="15 9 20 12 15 15" />
       </>,
     ),
-    command: toggleInlineCode,
+    command: 'toggleInlineCode',
   },
   {
-    key: 'code-block',
     labelKey: 'Code block',
     shortcut: shortcut('Mod', 'Shift', 'E'),
     icon: icon(
@@ -148,13 +123,12 @@ const CODE_BUTTONS: ToolButton[] = [
         <polyline points="8 6 2 12 8 18" />
       </>,
     ),
-    command: insertCodeBlock,
+    command: 'insertCodeBlock',
   },
 ];
 
 const LIST_BUTTONS: ToolButton[] = [
   {
-    key: 'ul',
     labelKey: 'Bulleted list',
     shortcut: shortcut('Mod', 'Shift', 'L'),
     icon: icon(
@@ -167,10 +141,9 @@ const LIST_BUTTONS: ToolButton[] = [
         <line x1="3" y1="18" x2="3.01" y2="18" />
       </>,
     ),
-    command: toggleBulletList,
+    command: 'toggleBulletList',
   },
   {
-    key: 'ol',
     labelKey: 'Numbered list',
     shortcut: shortcut('Mod', 'Shift', 'O'),
     icon: icon(
@@ -183,10 +156,9 @@ const LIST_BUTTONS: ToolButton[] = [
         <path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1" />
       </>,
     ),
-    command: toggleOrderedList,
+    command: 'toggleOrderedList',
   },
   {
-    key: 'task',
     labelKey: 'Task list',
     shortcut: shortcut('Mod', 'Shift', 'T'),
     icon: icon(
@@ -195,13 +167,12 @@ const LIST_BUTTONS: ToolButton[] = [
         <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
       </>,
     ),
-    command: toggleTaskList,
+    command: 'toggleTaskList',
   },
 ];
 
 const MEDIA_BUTTONS: ToolButton[] = [
   {
-    key: 'image',
     labelKey: 'Insert image',
     icon: icon(
       <>
@@ -210,13 +181,12 @@ const MEDIA_BUTTONS: ToolButton[] = [
         <polyline points="21 15 16 10 5 21" />
       </>,
     ),
-    command: insertImage,
+    command: 'insertImage',
   },
   {
-    key: 'divider',
     labelKey: 'Horizontal rule',
     icon: icon(<line x1="3" y1="12" x2="21" y2="12" />),
-    command: insertDivider,
+    command: 'insertDivider',
   },
 ];
 
@@ -229,7 +199,7 @@ function Divider() {
   );
 }
 
-function HeadingMenu({ getView }: { getView: () => EditorView | null }) {
+function HeadingMenu({ commands }: EditorToolbarProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -260,13 +230,12 @@ function HeadingMenu({ getView }: { getView: () => EditorView | null }) {
           className="absolute left-0 top-full mt-1 rounded-lg shadow-lg border py-1 z-50"
           style={{ backgroundColor: 'var(--card-bg)', borderColor: 'var(--border-primary)' }}
         >
-          {[1, 2, 3, 4, 5, 6].map((level) => (
+          {([1, 2, 3, 4, 5, 6] as const).map((level) => (
             <button
               key={level}
               type="button"
               onClick={() => {
-                const view = getView();
-                if (view) headingCommands(level as 1)(view);
+                commands.current?.toggleHeading(level);
                 setOpen(false);
               }}
               className="block w-32 text-left px-3 py-1.5 text-sm transition-colors hover:opacity-80"
@@ -285,7 +254,7 @@ function HeadingMenu({ getView }: { getView: () => EditorView | null }) {
   );
 }
 
-function TableMenu({ getView }: { getView: () => EditorView | null }) {
+function TableMenu({ commands }: EditorToolbarProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -304,6 +273,7 @@ function TableMenu({ getView }: { getView: () => EditorView | null }) {
       <Tooltip label={t('Table')}>
         <button
           type="button"
+          aria-label={t('Table')}
           onClick={() => setOpen((v) => !v)}
           className="fn-tool-btn p-1.5 rounded"
           style={{ color: 'var(--text-secondary)' }}
@@ -329,8 +299,7 @@ function TableMenu({ getView }: { getView: () => EditorView | null }) {
       {open && (
         <TablePicker
           onSelect={(rows, cols) => {
-            const view = getView();
-            if (view) insertTable(rows, cols)(view);
+            commands.current?.insertTable?.(rows, cols);
           }}
           onClose={() => setOpen(false)}
         />
@@ -339,22 +308,14 @@ function TableMenu({ getView }: { getView: () => EditorView | null }) {
   );
 }
 
-function ToolbarButton({
-  button,
-  getView,
-}: {
-  button: ToolButton;
-  getView: () => EditorView | null;
-}) {
+function ToolbarButton({ button, commands }: EditorToolbarProps & { button: ToolButton }) {
   const { t } = useTranslation();
   return (
     <Tooltip label={t(button.labelKey)} shortcut={button.shortcut}>
       <button
         type="button"
-        onClick={() => {
-          const view = getView();
-          if (view) button.command(view);
-        }}
+        aria-label={t(button.labelKey)}
+        onClick={() => commands.current?.format(button.command)}
         className="fn-tool-btn p-1.5 rounded"
         style={{ color: 'var(--text-secondary)' }}
       >
@@ -364,7 +325,11 @@ function ToolbarButton({
   );
 }
 
-function EditorToolbar({ getView }: EditorToolbarProps) {
+function EditorToolbar({ commands }: EditorToolbarProps) {
+  const renderButtons = (buttons: ToolButton[]) =>
+    buttons.map((button) => (
+      <ToolbarButton key={button.command} button={button} commands={commands} />
+    ));
   return (
     <div
       className="flex items-center gap-0.5 px-2 py-1 shrink-0"
@@ -373,28 +338,18 @@ function EditorToolbar({ getView }: EditorToolbarProps) {
         borderBottom: '1px solid var(--border-secondary)',
       }}
     >
-      {BASIC_BUTTONS.map((b) => (
-        <ToolbarButton key={b.key} button={b} getView={getView} />
-      ))}
+      {renderButtons(BASIC_BUTTONS)}
       <Divider />
-      <HeadingMenu getView={getView} />
-      {STRUCTURE_BUTTONS.map((b) => (
-        <ToolbarButton key={b.key} button={b} getView={getView} />
-      ))}
+      <HeadingMenu commands={commands} />
+      {renderButtons(STRUCTURE_BUTTONS)}
       <Divider />
-      {CODE_BUTTONS.map((b) => (
-        <ToolbarButton key={b.key} button={b} getView={getView} />
-      ))}
+      {renderButtons(CODE_BUTTONS)}
       <Divider />
-      {LIST_BUTTONS.map((b) => (
-        <ToolbarButton key={b.key} button={b} getView={getView} />
-      ))}
+      {renderButtons(LIST_BUTTONS)}
       <Divider />
-      {MEDIA_BUTTONS.map((b) => (
-        <ToolbarButton key={b.key} button={b} getView={getView} />
-      ))}
+      {renderButtons(MEDIA_BUTTONS)}
       <Divider />
-      <TableMenu getView={getView} />
+      <TableMenu commands={commands} />
     </div>
   );
 }

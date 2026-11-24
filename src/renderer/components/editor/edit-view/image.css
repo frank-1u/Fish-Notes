@@ -1,0 +1,35 @@
+.edit-image {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: middle;
+  line-height: 0;
+}
+
+.edit-image > img {
+  display: block;
+}
+
+.edit-image.ProseMirror-selectednode {
+  outline: 2px solid var(--accent-fg);
+}
+
+.edit-image-handle {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 24px;
+  border: 2px solid var(--bg-primary);
+  border-radius: 4px;
+  background: var(--accent-fg);
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.edit-image:hover .edit-image-handle,
+.edit-image.ProseMirror-selectednode .edit-image-handle {
+  display: block;
+}
