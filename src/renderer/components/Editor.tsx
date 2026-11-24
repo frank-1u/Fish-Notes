@@ -10,8 +10,50 @@ import PasswordPrompt from './PasswordPrompt';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { useAppActions, useEncryption } from '../contexts/AppContext';
 import { message } from './message';
+import { NavigationSidebarIcon, NoteListIcon } from './icons';
+
+interface PaneTogglesProps {
+  sidebarVisible: boolean;
+  noteListVisible: boolean;
+  onToggleSidebar: () => void;
+  onToggleNoteList: () => void;
+}
+
+export function PaneToggles({
+  sidebarVisible,
+  noteListVisible,
+  onToggleSidebar,
+  onToggleNoteList,
+}: PaneTogglesProps) {
+  const { t } = useTranslation();
+  return (
+    <>
+      <button
+        type="button"
+        className="fn-pane-toggle"
+        aria-label={t('Navigation Sidebar')}
+        aria-pressed={sidebarVisible}
+        title={sidebarVisible ? t('Hide Navigation Sidebar') : t('Show Navigation Sidebar')}
+        onClick={onToggleSidebar}
+      >
+        <NavigationSidebarIcon size={18} />
+      </button>
+      <button
+        type="button"
+        className="fn-pane-toggle"
+        aria-label={t('Note List')}
+        aria-pressed={noteListVisible}
+        title={noteListVisible ? t('Hide Note List') : t('Show Note List')}
+        onClick={onToggleNoteList}
+      >
+        <NoteListIcon size={18} />
+      </button>
+    </>
+  );
+}
 
 interface EditorProps {
+  headerStart?: React.ReactNode;
   noteId: string | null;
   title: string;
   content: string;
@@ -22,6 +64,7 @@ interface EditorProps {
 }
 
 function Editor({
+  headerStart,
   noteId,
   title,
   content,
@@ -252,14 +295,14 @@ function Editor({
       className="relative flex-1 flex flex-col min-w-0 transition-colors"
       style={{ backgroundColor: 'var(--bg-primary)' }}
     >
-      {/* Editor header with export button */}
       <div
-        className="h-12 flex items-center justify-end px-4 gap-1 shrink-0 no-select"
+        className="fn-pane-header h-12 flex items-center px-4 gap-1 shrink-0 no-select"
         data-tauri-drag-region={navigator.userAgent.includes('Macintosh') ? true : undefined}
         style={{ borderBottom: '1px solid var(--border-secondary)' }}
       >
+        {headerStart}
         {noteId && (
-          <div className="flex items-center gap-1">
+          <div className="ml-auto flex items-center gap-1">
             {/* Lock/unlock button */}
             {encryptionReady && sessionUnlocked && (
               <button

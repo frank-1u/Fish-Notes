@@ -34,7 +34,16 @@ beforeEach(async () => {
     return [];
   });
   // jsdom has no hit testing. A drop with no hit uses the editor selection.
-  vi.stubGlobal('PointerEvent', MouseEvent);
+  vi.stubGlobal(
+    'PointerEvent',
+    class extends MouseEvent {
+      readonly pointerId: number;
+      constructor(type: string, init: PointerEventInit = {}) {
+        super(type, init);
+        this.pointerId = init.pointerId ?? 0;
+      }
+    },
+  );
   Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', {
     configurable: true,
     value: vi.fn(),
@@ -159,6 +168,58 @@ it('saves the dragged width and restores inline and standalone resized images ac
   await openNote(tag);
   expect(screen.getByAltText('A & B').getAttribute('width')).toBe('320');
   expect(screen.getByAltText('A & B').getAttribute('src')).toBe(displayUrl);
+});
+
+it('shrinks a local WebP when the pointer leaves its resize handle before release', async () => {
+  const src = 'fish-image://f4b47198-be5f-48c5-9d97-1f7c1e508cb1.webp';
+  const { change } = await openNote(`![](${src})`);
+  const img = screen.getByRole('textbox').querySelector<HTMLImageElement>('img[src]')!;
+  expect(img.src).toBe('http://fish-image.localhost/f4b47198-be5f-48c5-9d97-1f7c1e508cb1.webp');
+  vi.spyOn(img, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 582, 1256));
+  const handle = screen.getByLabelText('Resize image');
+  fireEvent.pointerDown(handle, { button: 0, clientX: 578 });
+  fireEvent.pointerUp(handle, { clientX: 578 });
+  fireEvent.pointerDown(handle, { button: 0, clientX: 578 });
+  // WebView2 can target the image on the first move away from the handle.
+  fireEvent.pointerMove(img, { clientX: 518 });
+  expect(img.width).toBe(522);
+  expect(change).not.toHaveBeenCalled();
+  fireEvent.pointerUp(img, { clientX: 458 });
+  expect(change).toHaveBeenLastCalledWith(`<img src="${src}" alt="" width="462" />`);
+});
+
+it('restores the saved width when a resize is canceled outside the image', async () => {
+  const { change } = await openNote(
+    '<img src="fish-image://photo.webp" alt="saved" width="420" />',
+  );
+  const img = screen.getByAltText<HTMLImageElement>('saved');
+  vi.spyOn(img, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 420, 900));
+  fireEvent.pointerDown(screen.getByLabelText('Resize image'), { button: 0, clientX: 415 });
+  fireEvent.pointerMove(document.body, { clientX: 475 });
+  expect(img.width).toBe(480);
+  fireEvent.pointerCancel(document.body);
+  fireEvent.pointerUp(document.body, { clientX: 535 });
+  expect(img.width).toBe(420);
+  expect(change).not.toHaveBeenCalled();
+});
+
+it('continues resizing on the document after the handle loses pointer capture', async () => {
+  const { change } = await openNote('![Tall](fish-image://tall.webp)');
+  const img = screen.getByAltText<HTMLImageElement>('Tall');
+  vi.spyOn(img, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 582, 1256));
+  const handle = screen.getByLabelText('Resize image');
+  fireEvent.pointerDown(handle, { pointerId: 7, button: 0, clientX: 578 });
+  fireEvent.pointerMove(handle, { pointerId: 7, clientX: 548 });
+  expect(img.width).toBe(552);
+  fireEvent.lostPointerCapture(handle, { pointerId: 7 });
+  fireEvent.pointerMove(document, { pointerId: 7, clientX: 518 });
+  expect(img.width).toBe(522);
+  expect(change).not.toHaveBeenCalled();
+  fireEvent.pointerUp(document, { pointerId: 7, clientX: 458 });
+  expect(change).toHaveBeenCalledOnce();
+  expect(change).toHaveBeenCalledWith(
+    '<img src="fish-image://tall.webp" alt="Tall" width="462" />',
+  );
 });
 
 it.each(['Backspace', 'Delete'])('deletes only the clicked image with %s', async (key) => {

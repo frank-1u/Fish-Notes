@@ -9,6 +9,25 @@
   user-select: none;
 }
 
+.fn-pane-toggle {
+  @apply rounded p-1.5 transition-colors;
+  color: var(--text-tertiary);
+}
+
+.fn-pane-toggle:hover {
+  background-color: var(--bg-hover);
+}
+
+.fn-pane-toggle[aria-pressed='true'] {
+  color: var(--text-active);
+  background-color: var(--bg-active);
+}
+
+/* Leave room for the native window controls when a header reaches the left edge. */
+:first-child > .fn-pane-header[data-tauri-drag-region] {
+  padding-left: 5.5rem;
+}
+
 * {
   scrollbar-width: thin;
 }
