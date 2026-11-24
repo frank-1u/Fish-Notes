@@ -205,7 +205,7 @@ function NoteList({ width, onResizeStart }: NoteListProps) {
   return (
     <section
       aria-label={t('Note List')}
-      className="relative flex flex-col no-select min-w-0 transition-colors"
+      className="relative flex flex-col no-select shrink-0 transition-colors"
       style={{
         width,
         backgroundColor: 'var(--bg-primary)',

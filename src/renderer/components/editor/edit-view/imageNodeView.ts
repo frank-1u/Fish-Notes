@@ -74,7 +74,6 @@ export const imageNodeView: NodeViewRenderer = ({ node, editor, getPos }) => {
     doc.addEventListener('pointermove', previewWidth, options);
     doc.addEventListener('pointerup', commitWidth, options);
     doc.addEventListener('pointercancel', cancelDrag, options);
-    handle.addEventListener('lostpointercapture', cancelDrag, options);
     doc.defaultView?.addEventListener('blur', restoreWidth, options);
     handle.setPointerCapture(event.pointerId);
   });

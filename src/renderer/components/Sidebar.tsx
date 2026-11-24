@@ -109,7 +109,7 @@ function Sidebar({ width, onResizeStart, onSearchClick, onSettingsClick }: Sideb
   return (
     <nav
       aria-label={t('Navigation Sidebar')}
-      className="relative flex flex-col no-select min-w-0 transition-colors"
+      className="relative flex flex-col no-select shrink-0 transition-colors"
       style={{
         width,
         backgroundColor: 'var(--bg-secondary)',

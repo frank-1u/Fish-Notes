@@ -13,9 +13,19 @@ const NOTELIST_MIN = 200;
 const NOTELIST_MAX = 450;
 
 function usePaneVisibility(storageKey: string) {
-  const [visible, setVisible] = useState(() => localStorage.getItem(storageKey) !== 'false');
+  const [visible, setVisible] = useState(() => {
+    try {
+      return localStorage.getItem(storageKey) !== 'false';
+    } catch {
+      return true;
+    }
+  });
   useEffect(() => {
-    localStorage.setItem(storageKey, String(visible));
+    try {
+      localStorage.setItem(storageKey, String(visible));
+    } catch {
+      // Keep the in-memory preference when storage is unavailable.
+    }
   }, [storageKey, visible]);
   return [visible, () => setVisible((previous) => !previous)] as const;
 }

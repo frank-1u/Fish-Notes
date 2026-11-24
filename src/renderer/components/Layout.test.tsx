@@ -1,6 +1,8 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import postcss from 'postcss';
+import tailwindcss from 'tailwindcss';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { AppProvider } from '../contexts/AppContext';
 import { AssistantProvider } from '../contexts/AssistantContext';
 import { ThemeProvider } from '../contexts/ThemeContext';
@@ -33,7 +35,10 @@ beforeEach(async () => {
   });
 });
 
-afterEach(clearMocks);
+afterEach(() => {
+  clearMocks();
+  vi.restoreAllMocks();
+});
 
 function renderLayout() {
   return act(async () =>
@@ -71,6 +76,34 @@ it('can hide and reopen each pane independently from the empty editor header', a
   fireEvent.click(toggle('Navigation Sidebar'));
   expectPanes(true, false);
   fireEvent.click(toggle('Note List'));
+  expectPanes(true, true);
+});
+
+it('defaults both panes to visible when their preferences cannot be read', async () => {
+  localStorage.setItem('fish-notes:sidebar-visible', 'false');
+  localStorage.setItem('fish-notes:note-list-visible', 'false');
+  const read = localStorage.getItem.bind(localStorage);
+  vi.spyOn(Storage.prototype, 'getItem').mockImplementation((key) => {
+    if (key.endsWith('-visible')) throw new DOMException('Access denied', 'SecurityError');
+    return read(key);
+  });
+  await renderLayout();
+  expectPanes(true, true);
+});
+
+it('keeps both pane toggles working when their preferences exceed the storage quota', async () => {
+  const write = localStorage.setItem.bind(localStorage);
+  vi.spyOn(Storage.prototype, 'setItem').mockImplementation((key, value) => {
+    if (key.endsWith('-visible')) throw new DOMException('Storage full', 'QuotaExceededError');
+    write(key, value);
+  });
+  await renderLayout();
+  expectPanes(true, true);
+  fireEvent.click(toggle('Navigation Sidebar'));
+  fireEvent.click(toggle('Note List'));
+  expectPanes(false, false);
+  fireEvent.click(toggle('Note List'));
+  fireEvent.click(toggle('Navigation Sidebar'));
   expectPanes(true, true);
 });
 
@@ -137,11 +170,17 @@ it.each([
 });
 
 it('restores the dragged width of both panes after editor-only mode', async () => {
+  // jsdom doesn't lay out flex items. Apply the project's utilities to check their shrink policy.
+  const { css } = await postcss([tailwindcss()]).process('@tailwind utilities;', {
+    from: undefined,
+  });
+  render(<style>{css}</style>);
   await renderLayout();
   const sidebar = () => screen.getByRole('navigation', { name: 'Navigation Sidebar' });
   const list = () => screen.getByRole('region', { name: 'Note List' });
 
   function resize(pane: HTMLElement, delta: number) {
+    expect(getComputedStyle(pane).flexShrink).toBe('0');
     const start = parseFloat(getComputedStyle(pane).width);
     fireEvent.mouseDown(within(pane).getByRole('separator'), { clientX: 100 });
     fireEvent.mouseMove(document, { clientX: 100 + delta });

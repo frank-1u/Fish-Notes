@@ -292,7 +292,7 @@ function Editor({
 
   return (
     <div
-      className="relative flex-1 flex flex-col min-w-40 transition-colors"
+      className="relative flex-1 flex flex-col min-w-0 transition-colors"
       style={{ backgroundColor: 'var(--bg-primary)' }}
     >
       <div
