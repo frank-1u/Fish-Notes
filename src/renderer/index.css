@@ -169,3 +169,47 @@ body {
     opacity: 0.45;
   }
 }
+
+.edit-view {
+  min-height: 100%;
+  outline: none;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  tab-size: 4;
+}
+
+.edit-view code::before,
+.edit-view code::after {
+  content: none;
+}
+.edit-view .ProseMirror-gapcursor::after {
+  border-color: var(--text-primary);
+}
+.edit-view ul {
+  list-style: disc;
+}
+.edit-view ol {
+  list-style: decimal;
+}
+.edit-view pre {
+  white-space: pre;
+}
+.edit-view p:has(> br:only-child) {
+  margin: 0;
+}
+.edit-code-language {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 1rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+}
+.edit-code-language input {
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-secondary);
+  border-radius: 0.25rem;
+  padding: 0.1rem 0.4rem;
+}

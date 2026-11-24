@@ -134,8 +134,6 @@ const CodeMirrorView = forwardRef<CodeMirrorHandle, CodeMirrorViewProps>(
           { key: 'Mod-Shift-l', run: toggleBulletList, preventDefault: true },
           { key: 'Mod-Shift-o', run: toggleOrderedList, preventDefault: true },
           { key: 'Mod-Shift-t', run: toggleTaskList, preventDefault: true },
-          { key: 'Mod-1', run: headingCommands(1), preventDefault: true },
-          { key: 'Mod-2', run: headingCommands(2), preventDefault: true },
           { key: 'Mod-3', run: headingCommands(3), preventDefault: true },
           { key: 'Mod-4', run: headingCommands(4), preventDefault: true },
           { key: 'Mod-5', run: headingCommands(5), preventDefault: true },

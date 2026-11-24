@@ -6,6 +6,7 @@ import TablePicker from './TablePicker';
 
 interface EditorToolbarProps {
   commands: RefObject<EditorCommandAdapter>;
+  supports?: (command: FormatCommand | 'insertTable') => boolean;
 }
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
@@ -299,7 +300,7 @@ function TableMenu({ commands }: EditorToolbarProps) {
       {open && (
         <TablePicker
           onSelect={(rows, cols) => {
-            commands.current?.insertTable(rows, cols);
+            commands.current?.insertTable?.(rows, cols);
           }}
           onClose={() => setOpen(false)}
         />
@@ -325,7 +326,11 @@ function ToolbarButton({ button, commands }: EditorToolbarProps & { button: Tool
   );
 }
 
-function EditorToolbar({ commands }: EditorToolbarProps) {
+function EditorToolbar({ commands, supports }: EditorToolbarProps) {
+  const renderButtons = (buttons: ToolButton[]) =>
+    buttons
+      .filter((button) => !supports || supports(button.command))
+      .map((button) => <ToolbarButton key={button.command} button={button} commands={commands} />);
   return (
     <div
       className="flex items-center gap-0.5 px-2 py-1 shrink-0"
@@ -334,28 +339,22 @@ function EditorToolbar({ commands }: EditorToolbarProps) {
         borderBottom: '1px solid var(--border-secondary)',
       }}
     >
-      {BASIC_BUTTONS.map((b) => (
-        <ToolbarButton key={b.command} button={b} commands={commands} />
-      ))}
+      {renderButtons(BASIC_BUTTONS)}
       <Divider />
       <HeadingMenu commands={commands} />
-      {STRUCTURE_BUTTONS.map((b) => (
-        <ToolbarButton key={b.command} button={b} commands={commands} />
-      ))}
+      {renderButtons(STRUCTURE_BUTTONS)}
       <Divider />
-      {CODE_BUTTONS.map((b) => (
-        <ToolbarButton key={b.command} button={b} commands={commands} />
-      ))}
+      {renderButtons(CODE_BUTTONS)}
       <Divider />
-      {LIST_BUTTONS.map((b) => (
-        <ToolbarButton key={b.command} button={b} commands={commands} />
-      ))}
+      {renderButtons(LIST_BUTTONS)}
       <Divider />
-      {MEDIA_BUTTONS.map((b) => (
-        <ToolbarButton key={b.command} button={b} commands={commands} />
-      ))}
-      <Divider />
-      <TableMenu commands={commands} />
+      {renderButtons(MEDIA_BUTTONS)}
+      {(!supports || supports('insertTable')) && (
+        <>
+          <Divider />
+          <TableMenu commands={commands} />
+        </>
+      )}
     </div>
   );
 }
